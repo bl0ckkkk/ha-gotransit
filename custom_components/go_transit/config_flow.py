@@ -15,6 +15,7 @@ import aiohttp
 import voluptuous as vol
 
 from homeassistant import config_entries
+from homeassistant.helpers import selector
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 
@@ -225,12 +226,12 @@ class GoTransitConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             schema_dict[vol.Optional(CONF_LINE_CODE)] = vol.In(line_names)
         schema_dict.update({
             vol.Optional(CONF_MAX_DEPARTURES, default=5): vol.All(int, vol.Range(min=1, max=10)),
-            vol.Optional(CONF_COMMUTE_START, default=DEFAULT_COMMUTE_START): vol.All(str, _time_validator),
-            vol.Optional(CONF_COMMUTE_END, default=DEFAULT_COMMUTE_END): vol.All(str, _time_validator),
+            vol.Optional(CONF_COMMUTE_START, default=DEFAULT_COMMUTE_START): selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.TIME)),
+            vol.Optional(CONF_COMMUTE_END, default=DEFAULT_COMMUTE_END): selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.TIME)),
             vol.Optional(CONF_TRAVEL_TIME_SENSOR, default=""): str,
             vol.Optional(CONF_TRAVEL_TIME_FIXED, default=DEFAULT_TRAVEL_TIME_FIXED): vol.All(int, vol.Range(min=0, max=120)),
-            vol.Optional(CONF_SERVICE_START, default=DEFAULT_SERVICE_START): vol.All(str, _time_validator),
-            vol.Optional(CONF_SERVICE_END, default=DEFAULT_SERVICE_END): vol.All(str, _time_validator),
+            vol.Optional(CONF_SERVICE_START, default=DEFAULT_SERVICE_START): selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.TIME)),
+            vol.Optional(CONF_SERVICE_END, default=DEFAULT_SERVICE_END): selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.TIME)),
         })
 
         return self.async_show_form(
@@ -266,11 +267,11 @@ class GoTransitOptionsFlow(config_entries.OptionsFlow):
                 vol.Optional(
                     CONF_COMMUTE_START,
                     default=opts.get(CONF_COMMUTE_START, data.get(CONF_COMMUTE_START, DEFAULT_COMMUTE_START)),
-                ): vol.All(str, _time_validator),
+                ): selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.TIME)),
                 vol.Optional(
                     CONF_COMMUTE_END,
                     default=opts.get(CONF_COMMUTE_END, data.get(CONF_COMMUTE_END, DEFAULT_COMMUTE_END)),
-                ): vol.All(str, _time_validator),
+                ): selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.TIME)),
                 vol.Optional(
                     CONF_TRAVEL_TIME_SENSOR,
                     default=opts.get(CONF_TRAVEL_TIME_SENSOR, data.get(CONF_TRAVEL_TIME_SENSOR, "")),
@@ -282,10 +283,10 @@ class GoTransitOptionsFlow(config_entries.OptionsFlow):
                 vol.Optional(
                     CONF_SERVICE_START,
                     default=opts.get(CONF_SERVICE_START, data.get(CONF_SERVICE_START, DEFAULT_SERVICE_START)),
-                ): vol.All(str, _time_validator),
+                ): selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.TIME)),
                 vol.Optional(
                     CONF_SERVICE_END,
                     default=opts.get(CONF_SERVICE_END, data.get(CONF_SERVICE_END, DEFAULT_SERVICE_END)),
-                ): vol.All(str, _time_validator),
+                ): selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.TIME)),
             }),
         )
