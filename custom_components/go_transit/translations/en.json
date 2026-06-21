@@ -1,0 +1,50 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "GO Transit — API Key",
+        "description": "Enter your OpenMetrolinx API key. Register free at {register_url}",
+        "data": {"api_key": "API Key"}
+      },
+      "route": {
+        "title": "GO Transit — Route & Schedule",
+        "description": "Stations load live from the GO API. Add this integration again to monitor another route.",
+        "data": {
+          "from_stop": "Boarding Station",
+          "to_stop": "Destination Station",
+          "line_code": "Line (optional — filters to this line only)",
+          "max_departures": "Upcoming departures to fetch (1–10)",
+          "commute_start": "Commute window start (HH:MM) — faster train tracking",
+          "commute_end": "Commute window end (HH:MM)",
+          "travel_time_sensor": "Travel-time sensor entity (optional, e.g. sensor.home_to_go_station)",
+          "travel_time_fixed": "Fixed travel time fallback (minutes)",
+          "service_start": "Service hours start (HH:MM) — no polling before this",
+          "service_end": "Service hours end (HH:MM) — overnight window supported"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid API key — check your OpenMetrolinx key and try again.",
+      "cannot_connect": "Could not connect to the GO Transit API. Check your network.",
+      "no_stops": "API returned no stops. The key may lack the required permissions.",
+      "same_stop": "Boarding and destination stations must be different."
+    },
+    "abort": {"already_configured": "This route is already configured."}
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "GO Transit Options",
+        "data": {
+          "max_departures": "Upcoming departures to fetch (1–10)",
+          "commute_start": "Commute window start (HH:MM)",
+          "commute_end": "Commute window end (HH:MM)",
+          "travel_time_sensor": "Travel-time sensor entity",
+          "travel_time_fixed": "Fixed travel time fallback (minutes)",
+          "service_start": "Service hours start (HH:MM)",
+          "service_end": "Service hours end (HH:MM)"
+        }
+      }
+    }
+  }
+}
