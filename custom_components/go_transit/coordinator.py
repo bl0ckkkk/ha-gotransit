@@ -44,7 +44,7 @@ _LOGGER = logging.getLogger(__name__)
 async def _api_get(
     session: aiohttp.ClientSession, api_key: str, path: str, params: dict | None = None
 ) -> Any:
-    url = f"{BASE_URL}/{path}.json"
+    url = f"{BASE_URL}/{path}"
     p = {"key": api_key}
     if params:
         p.update(params)
