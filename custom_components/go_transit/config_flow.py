@@ -54,7 +54,7 @@ class _ApiError(Exception):
 
 
 async def _api_get(api_key: str, path: str) -> Any:
-    url = f"{BASE_URL}/{path}.json"
+    url = f"{BASE_URL}/{path}"
     async with aiohttp.ClientSession() as session:
         async with session.get(
             url, params={"key": api_key}, timeout=aiohttp.ClientTimeout(total=15)
@@ -76,6 +76,8 @@ async def _api_get(api_key: str, path: str) -> Any:
             code = str(meta.get("ErrorCode", "200"))
             if code in ("401", "403"):
                 raise _AuthError(f"Metadata ErrorCode {code}: {meta.get('ErrorMessage')}")
+            if code == "404":
+                raise _ApiError(f"Metadata ErrorCode 404: {meta.get('ErrorMessage')} (endpoint not found)")
             return data
 
 
