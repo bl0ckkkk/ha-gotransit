@@ -44,16 +44,44 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 
+class _AuthError(Exception):
+    """API rejected the key (HTTP 401/403 or Metadata error code)."""
+
+
+class _ApiError(Exception):
+    """API reachable but returned an error or unexpected shape."""
+
+
 async def _api_get(api_key: str, path: str) -> Any:
     url = f"{BASE_URL}/{path}.json"
     async with aiohttp.ClientSession() as session:
-        async with session.get(url, params={"key": api_key}, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+        async with session.get(
+            url, params={"key": api_key}, timeout=aiohttp.ClientTimeout(total=15)
+        ) as resp:
+            # Auth failures come back as 401/403
+            if resp.status in (401, 403):
+                raise _AuthError(f"HTTP {resp.status}")
+            text = await resp.text()
             if resp.status != 200:
-                raise aiohttp.ClientError(f"HTTP {resp.status}")
-            return await resp.json(content_type=None)
+                raise _ApiError(f"HTTP {resp.status}: {text[:200]}")
+            try:
+                data = await resp.json(content_type=None)
+            except Exception as err:  # noqa: BLE001
+                raise _ApiError(f"Non-JSON response: {text[:200]}") from err
+            # The API reports errors inside Metadata.ErrorCode even on HTTP 200
+            meta = data.get("Metadata", {}) if isinstance(data, dict) else {}
+            code = str(meta.get("ErrorCode", "200"))
+            if code in ("401", "403"):
+                raise _AuthError(f"Metadata ErrorCode {code}: {meta.get('ErrorMessage')}")
+            return data
 
 
 async def _fetch_stops(api_key: str) -> dict[str, str]:
+    """Fetch stops, keeping only train-served stations.
+
+    Stop/All returns hundreds of bus stops mixed with rail stations. We keep
+    only LocationType values mentioning "Train" (e.g. "Train Station",
+    "Train & Bus Station") so the dropdown stays to the ~70 GO rail stops."""
     data = await _api_get(api_key, "Stop/All")
     stations = data.get("Stations", {}).get("Station", [])
     if isinstance(stations, dict):
@@ -62,8 +90,16 @@ async def _fetch_stops(api_key: str) -> dict[str, str]:
     for s in stations:
         name = s.get("LocationName", "").strip()
         code = s.get("LocationCode", "").strip()
-        if name and code:
+        loc_type = str(s.get("LocationType", ""))
+        if name and code and "train" in loc_type.lower():
             result[name] = code
+    # Fallback: if filtering removed everything (API shape changed), keep all
+    if not result:
+        for s in stations:
+            name = s.get("LocationName", "").strip()
+            code = s.get("LocationCode", "").strip()
+            if name and code:
+                result[name] = code
     return dict(sorted(result.items()))
 
 
@@ -107,7 +143,12 @@ class GoTransitConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             api_key = user_input[CONF_API_KEY].strip()
             try:
                 stops = await _fetch_stops(api_key)
-                lines = await _fetch_lines(api_key)
+                # Lines are optional — a failure here must NOT block setup
+                try:
+                    lines = await _fetch_lines(api_key)
+                except Exception:  # noqa: BLE001
+                    _LOGGER.warning("Could not fetch lines; continuing without line filter")
+                    lines = {}
                 if not stops:
                     errors["base"] = "no_stops"
                 else:
@@ -115,9 +156,12 @@ class GoTransitConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     self._stops = stops
                     self._lines = lines
                     return await self.async_step_route()
-            except aiohttp.ClientError:
+            except _AuthError:
                 errors["base"] = "invalid_auth"
+            except (_ApiError, aiohttp.ClientError):
+                errors["base"] = "cannot_connect"
             except Exception:  # noqa: BLE001
+                _LOGGER.exception("Unexpected error validating GO Transit API key")
                 errors["base"] = "cannot_connect"
 
         return self.async_show_form(

@@ -1,12 +1,14 @@
 {
   "domain": "go_transit",
   "name": "GO Transit",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "config_flow": true,
-  "documentation": "https://github.com/yourusername/ha-go-transit",
-  "issue_tracker": "https://github.com/yourusername/ha-go-transit/issues",
+  "documentation": "https://github.com/bl0ckkkk/ha-gotransit",
+  "issue_tracker": "https://github.com/bl0ckkkk/ha-gotransit/issues",
   "dependencies": [],
-  "codeowners": [],
+  "codeowners": [
+    "@bl0ckkkk"
+  ],
   "requirements": [],
   "iot_class": "cloud_polling",
   "integration_type": "service"
