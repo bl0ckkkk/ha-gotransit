@@ -17,7 +17,7 @@ Once installed, the integration creates a **device per monitored route** in Home
 
 | Sensor | What it shows |
 |--------|--------------|
-| **Next Departure** | The next train's departure time from your boarding station (actual time if available, scheduled otherwise) |
+| **Next Departure** | The next train's departure time from your boarding station (computed time if available, scheduled otherwise) |
 | **Delay** | How many minutes late the next train is (0 = on time) |
 | **Upcoming Departures** | A count of upcoming trips with the full schedule list in attributes |
 | **Service Alerts** | Count of active alerts affecting your line, with full alert details in attributes |
@@ -33,11 +33,11 @@ You can monitor **multiple routes simultaneously** — just add the integration 
 
 ## How polling works
 
-The integration uses three independent coordinators, each with a different polling rate to minimise API calls:
+The integration uses five independent coordinators, each with a different polling rate to minimise API calls:
 
 | Data | Endpoint | Poll rate |
 |------|----------|-----------|
-| Next departure + schedule | `Stop/NextService` + `Schedule/Journey` | Every **2 minutes** |
+| Next departure + schedule | `Stop/NextService` + `Schedule/Journey` + `ServiceUpdate/Exceptions` | Every **2 minutes** |
 | Vehicle positions | `ServiceataGlance/Trains/All` | Every **30 seconds** during your commute window; every **5 minutes** outside it |
 | Service alerts | `ServiceUpdate/ServiceAlert/All` | Every **15 minutes** |
 | Train consist | `Fleet/Consist/All` | Every **5 minutes** |
@@ -47,7 +47,7 @@ The integration uses three independent coordinators, each with a different polli
 
 **Estimated daily API calls (1 route, 5hr commute window): ~1,644** — well within the undocumented Metrolinx limits.
 
-The commute window is configurable at setup and can be changed anytime via the integration's ⚙️ Options menu.
+The commute window and service hours are configurable at setup and can be changed anytime via the integration's ⚙️ Options menu.
 
 ---
 
@@ -80,30 +80,46 @@ Enter your OpenMetrolinx API key. The integration will immediately call the GO A
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| **Boarding Station** | ✅ | Dropdown populated live from the API — every GO stop |
+| **Boarding Station** | ✅ | Dropdown populated live from the API — every GO rail stop |
 | **Destination Station** | ✅ | Same list |
 | **Line** | ❌ | Filters all sensors to this line only. Leave blank to get the next available train regardless of line |
 | **Upcoming departures to fetch** | ❌ | 1–10, default 5 |
 | **Commute window start** | ❌ | HH:MM format, default `05:00` |
 | **Commute window end** | ❌ | HH:MM format, default `10:00` |
+| **Travel time sensor** | ❌ | HA entity ID (e.g. `sensor.commute_time`) whose state is travel minutes to your station. Used by the Catchable sensor |
+| **Travel time (fixed)** | ❌ | Fallback travel time in minutes if no sensor is set or it's unavailable. Default `10` |
+| **Service hours start** | ❌ | HH:MM — departure/consist/guarantee coordinators pause before this. Default `05:00` |
+| **Service hours end** | ❌ | HH:MM — same coordinators pause after this. Default `01:30` (overnight window) |
+
+All fields except boarding and destination stations can be changed anytime via the ⚙️ Options menu.
 
 ---
 
 ## Sensor details
 
 ### Next Departure
-**State:** Departure time as `HH:MM` (actual if the train is running, scheduled otherwise). `None` outside service hours.
+**State:** Departure time as `HH:MM` (computed time if the train is running, scheduled otherwise). `None` outside service hours.
 
 **Attributes:**
 ```yaml
 trip_number: "1234"
 destination: "Union Station"
-scheduled_time: "07:12"
-actual_time: "07:19"
-delay_minutes: 7
-status: "Delayed"
-platform: "2"
 line: "Lakeshore West"
+service_type: "Train"
+direction: "LSW"
+scheduled_time: "07:12"
+computed_time: "07:19"
+departure_status: "Delayed"
+scheduled_platform: "2"
+actual_platform: "2"
+status: "Delayed"
+delay_minutes: 7
+is_cancelled: false
+stop_is_cancelled: false
+stop_is_stopping: true
+latitude: 43.3841
+longitude: -79.8053
+update_time: "07:08"
 updated_at: "2026-06-20T07:08:34.112"
 ```
 
@@ -115,7 +131,9 @@ updated_at: "2026-06-20T07:08:34.112"
 **Attributes:**
 ```yaml
 trip_number: "1234"
+departure_status: "Delayed"
 status: "Delayed"
+is_cancelled: false
 ```
 
 ---
@@ -181,6 +199,60 @@ updated_at: "2026-06-20T07:09:01.883"
 
 ---
 
+### Train Consist
+**State:** Integer coach count (e.g. `10`). `None` if not yet matched.
+
+**Attributes:**
+```yaml
+trip_number: "1234"
+consist_number: "C42"
+engine_number: "912"
+lineup:
+  - order: 1
+    type: "Locomotive"
+    number: "912"
+  - order: 2
+    type: "BiLevel Coach"
+    number: "2341"
+updated_at: "2026-06-20T07:05:00.000"
+```
+
+---
+
+### Service Guarantee
+**State:** `Active` or `Not active`.
+
+**Attributes:**
+```yaml
+trip_number: "1234"
+reason: "Train delayed more than 15 minutes"
+affected_stops:
+  - stop_code: "BU"
+    scope: "Boarding"
+    reason: "Train delayed more than 15 minutes"
+updated_at: "2026-06-20T07:05:00.000"
+```
+
+---
+
+### Catchable (binary sensor)
+**State:** `On` when you can still make the next train from your boarding platform.
+
+Logic: `minutes_to_departure >= travel_minutes + 2 min buffer`. Cancelled trains always return `On` (redirect to next departure). Defaults to `On` when data is missing (fail-open — don't tell someone they've missed a train when uncertain).
+
+**Attributes:**
+```yaml
+minutes_to_departure: 14
+travel_minutes: 10
+departure_time: "2026-06-20 07:19:00"
+trip_number: "1234"
+is_cancelled: false
+travel_sensor: "sensor.commute_time"
+updated_at: "2026-06-20T07:08:34.112"
+```
+
+---
+
 ## Example automations
 
 ### Notify if your train is delayed at departure time
@@ -227,7 +299,7 @@ automation:
 - **Vehicle positions:** The Metrolinx GTFS Realtime vehicle feed (`Gtfs/Feed/VehiclePosition`) returns protobuf binary — this integration does not parse it. Positions come from `ServiceataGlance/Trains/All` instead, which is JSON but may have null lat/lon for some trips.
 - **Rate limits:** Metrolinx does not publish rate limit numbers. Their docs state keys can be disabled for "excessive" use. The tiered polling in this integration is conservative by design.
 - **API field names:** The OpenMetrolinx API docs show sample field names that may not exactly match live responses. If sensors show `unknown`, use the diagnostics tool (below) to inspect the raw API response and open an issue.
-- **Delay data:** Delay is computed from `ScheduledTime` vs `ActualTime` when a dedicated delay field isn't present. Outside active service hours, delay sensors return `0`.
+- **Delay data:** Delay is computed from `ScheduledDepartureTime` vs `ComputedDepartureTime` when a dedicated delay field isn't present. Outside active service hours, delay sensors return `0`.
 - **Schedule only outside service hours:** The `Stop/NextService` endpoint returns nothing when no trains are running. `Next Departure` will show `unavailable` overnight.
 
 ---
@@ -239,7 +311,7 @@ The integration ships with a HA diagnostics endpoint that dumps everything usefu
 1. Settings → Devices & Services → GO Transit → ⋮ → **Download diagnostics**
 2. The JSON file contains:
    - Your config (API key redacted)
-   - Raw API responses from all three coordinators
+   - Raw API responses from all five coordinators
    - Processed sensor data
    - Last error message per coordinator
    - Current poll intervals
@@ -258,8 +330,11 @@ This integration uses the following OpenMetrolinx endpoints:
 | `GET /api/V1/Schedule/Line/All/{date}` | Populating line dropdowns at setup |
 | `GET /api/V1/Stop/NextService/{StopCode}` | Next departure sensor |
 | `GET /api/V1/Schedule/Journey/{date}/{from}/{to}/{time}/{max}` | Upcoming departures sensor |
+| `GET /api/V1/ServiceUpdate/Exceptions/All` | Trip cancellation / stop exception data |
 | `GET /api/V1/ServiceUpdate/ServiceAlert/All` | Service alerts sensor |
 | `GET /api/V1/ServiceataGlance/Trains/All` | Active trains / vehicle positions sensor |
+| `GET /api/V1/Fleet/Consist/All` | Train consist sensor |
+| `GET /api/V1/ServiceUpdate/ServiceGuarantee/{trip}/{date}` | Service guarantee sensor |
 
 ---
 
