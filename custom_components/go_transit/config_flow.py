@@ -6,6 +6,7 @@ Options flow      : Adjust max_departures and commute window post-setup
 """
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime
 from typing import Any
@@ -61,12 +62,14 @@ async def _api_get(api_key: str, path: str) -> Any:
             # Auth failures come back as 401/403
             if resp.status in (401, 403):
                 raise _AuthError(f"HTTP {resp.status}")
+            # Read the body exactly once — reading text() then json() on the
+            # same response consumes the stream twice and raises.
             text = await resp.text()
             if resp.status != 200:
                 raise _ApiError(f"HTTP {resp.status}: {text[:200]}")
             try:
-                data = await resp.json(content_type=None)
-            except Exception as err:  # noqa: BLE001
+                data = json.loads(text)
+            except (ValueError, TypeError) as err:
                 raise _ApiError(f"Non-JSON response: {text[:200]}") from err
             # The API reports errors inside Metadata.ErrorCode even on HTTP 200
             meta = data.get("Metadata", {}) if isinstance(data, dict) else {}
@@ -156,9 +159,11 @@ class GoTransitConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     self._stops = stops
                     self._lines = lines
                     return await self.async_step_route()
-            except _AuthError:
+            except _AuthError as err:
+                _LOGGER.warning("GO Transit API rejected the key: %s", err)
                 errors["base"] = "invalid_auth"
-            except (_ApiError, aiohttp.ClientError):
+            except (_ApiError, aiohttp.ClientError) as err:
+                _LOGGER.warning("GO Transit API connection problem: %s", err)
                 errors["base"] = "cannot_connect"
             except Exception:  # noqa: BLE001
                 _LOGGER.exception("Unexpected error validating GO Transit API key")

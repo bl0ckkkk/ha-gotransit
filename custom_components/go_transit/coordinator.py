@@ -11,6 +11,7 @@ All response parsing is delegated to the pure functions in parsers.py
 """
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timedelta
 from typing import Any
@@ -51,7 +52,11 @@ async def _api_get(
         async with session.get(url, params=p, timeout=aiohttp.ClientTimeout(total=15)) as resp:
             if resp.status != 200:
                 raise UpdateFailed(f"GO API HTTP {resp.status} for {path}")
-            return await resp.json(content_type=None)
+            text = await resp.text()
+            try:
+                return json.loads(text)
+            except (ValueError, TypeError) as err:
+                raise UpdateFailed(f"GO API non-JSON response for {path}: {text[:120]}") from err
     except aiohttp.ClientError as err:
         raise UpdateFailed(f"Network error for {path}: {err}") from err
 
