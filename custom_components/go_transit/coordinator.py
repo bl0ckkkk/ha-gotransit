@@ -153,7 +153,7 @@ class DepartureCoordinator(_GoTransitBase):
         try:
             raw = await self._get(f"Stop/NextService/{self.from_stop_code}")
             self.last_raw["next_service"] = raw
-            result["next_departure"] = parsers.parse_next_service(raw, self.line_code)
+            result["next_departure"] = parsers.parse_next_service(raw, self.line_code, self.to_stop_name)
         except UpdateFailed as err:
             _LOGGER.warning("Next service fetch failed: %s", err)
         except Exception as err:  # noqa: BLE001

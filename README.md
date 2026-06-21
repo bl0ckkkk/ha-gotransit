@@ -265,6 +265,6 @@ This integration uses the following OpenMetrolinx endpoints:
 
 ## Credits
 
-Built for Home Assistant by [bl0ck](https://github.com/bl0ckkkk). Data provided by [Metrolinx / GO Transit](https://www.metrolinx.com) via the [OpenMetrolinx Open Data API](https://api.openmetrolinx.com).
+Built for Home Assistant by [bl0ck](https://github.com/yourusername). Data provided by [Metrolinx / GO Transit](https://www.metrolinx.com) via the [OpenMetrolinx Open Data API](https://api.openmetrolinx.com).
 
 Not affiliated with or endorsed by Metrolinx.

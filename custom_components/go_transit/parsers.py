@@ -22,9 +22,41 @@ def _as_list(value: Any) -> list:
     return []
 
 
+def _parse_api_time(value):
+    """Parse the GO API datetime format 'YYYY-MM-DD HH:MM:SS' into a datetime.
+    Also tolerates a bare 'HH:MM'. Returns None on failure."""
+    if not value or not isinstance(value, str):
+        return None
+    value = value.strip()
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%H:%M:%S", "%H:%M"):
+        try:
+            return datetime.strptime(value, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _hhmm(value):
+    """Extract 'HH:MM' display string from an API datetime, or None."""
+    dt = _parse_api_time(value)
+    return dt.strftime("%H:%M") if dt else None
+
+
+def _valid_coord(value):
+    """GO uses -1.0 as a 'no GPS' sentinel. Return float or None."""
+    try:
+        f = float(value)
+    except (ValueError, TypeError):
+        return None
+    if f == -1.0 or f == 0.0:
+        return None
+    return f
+
+
 def parse_delay(obj: dict) -> int | None:
     """Extract delay in minutes from a trip/line object.
-    Tries explicit delay fields first, then computes scheduled vs actual."""
+    Tries explicit delay fields first, then computes scheduled vs computed
+    using the API's 'YYYY-MM-DD HH:MM:SS' datetime format."""
     for key in ("DelayMinutes", "Delay", "DelayInMinutes"):
         val = obj.get(key)
         if val is not None:
@@ -32,49 +64,71 @@ def parse_delay(obj: dict) -> int | None:
                 return int(val)
             except (ValueError, TypeError):
                 pass
-    sched = obj.get("ScheduledTime") or obj.get("ScheduledDepartureTime")
-    actual = obj.get("ActualTime") or obj.get("ComputedDepartureTime")
+    sched = _parse_api_time(obj.get("ScheduledTime") or obj.get("ScheduledDepartureTime"))
+    actual = _parse_api_time(obj.get("ActualTime") or obj.get("ComputedDepartureTime"))
     if sched and actual and sched != actual:
-        try:
-            s = datetime.strptime(sched, "%H:%M")
-            a = datetime.strptime(actual, "%H:%M")
-            return int((a - s).total_seconds() / 60)
-        except ValueError:
-            pass
+        return int((actual - sched).total_seconds() / 60)
     return None
 
 
-def parse_next_service(raw: dict, line_code: str) -> dict | None:
-    """Parse Stop/NextService into the soonest departure dict, or None.
+def parse_next_service(raw: dict, line_code: str, destination: str = "") -> dict | None:
+    """Parse Stop/NextService into the soonest departure toward `destination`.
 
-    The API returns a flat Lines array; each entry is a trip prediction.
-    Filter to line_code (if set), then pick the lowest TripOrder."""
+    The API returns a flat Lines array mixing every direction from the stop
+    (Aldershot, Union, West Harbour, ...). DirectionCode is the same line code
+    for all of them, so we filter by DirectionName containing the destination
+    station name, then pick the EARLIEST departure by actual clock time
+    (TripOrder is per-direction and unreliable across mixed directions).
+
+    Times come as 'YYYY-MM-DD HH:MM:SS'. Coordinates use -1.0 as 'no GPS'."""
     lines = _as_list(raw.get("NextService", {}).get("Lines"))
+
+    # Filter by line code (trailing whitespace tolerated)
     candidates = [
         ln for ln in lines
-        if not line_code or str(ln.get("LineCode", "")).upper() == line_code.upper()
+        if not line_code or str(ln.get("LineCode", "")).strip().upper() == line_code.strip().upper()
     ]
+
+    # Filter by destination station name if provided (case-insensitive substring)
+    if destination:
+        dest_l = destination.strip().lower()
+        matched = [
+            ln for ln in candidates
+            if dest_l in str(ln.get("DirectionName", "")).lower()
+        ]
+        # Only narrow if we actually found destination matches; otherwise keep all
+        if matched:
+            candidates = matched
+
     if not candidates:
         return None
-    candidates.sort(key=lambda x: x.get("TripOrder", 9999))
+
+    # Sort by actual departure clock time, earliest first
+    def _dep_key(ln):
+        dt = _parse_api_time(ln.get("ComputedDepartureTime") or ln.get("ScheduledDepartureTime"))
+        return dt or datetime.max
+    candidates.sort(key=_dep_key)
+
     ln = candidates[0]
     return {
         "trip_number": ln.get("TripNumber"),
-        "destination": ln.get("DirectionName"),
-        "line_code": ln.get("LineCode"),
+        "destination": str(ln.get("DirectionName", "")).strip(),
+        "line_code": str(ln.get("LineCode", "")).strip(),
         "line_name": ln.get("LineName"),
         "service_type": ln.get("ServiceType"),
-        "direction_code": ln.get("DirectionCode"),
-        "scheduled_time": ln.get("ScheduledDepartureTime"),
-        "computed_time": ln.get("ComputedDepartureTime"),
+        "direction_code": str(ln.get("DirectionCode", "")).strip(),
+        "scheduled_time": _hhmm(ln.get("ScheduledDepartureTime")),
+        "computed_time": _hhmm(ln.get("ComputedDepartureTime")),
+        "scheduled_datetime": ln.get("ScheduledDepartureTime"),
+        "computed_datetime": ln.get("ComputedDepartureTime"),
         "departure_status": ln.get("DepartureStatus"),
         "scheduled_platform": ln.get("ScheduledPlatform"),
-        "actual_platform": ln.get("ActualPlatform"),
+        "actual_platform": ln.get("ActualPlatform") or None,
         "status": ln.get("Status"),
         "delay_minutes": parse_delay(ln),
-        "latitude": ln.get("Latitude"),
-        "longitude": ln.get("Longitude"),
-        "update_time": ln.get("UpdateTime"),
+        "latitude": _valid_coord(ln.get("Latitude")),
+        "longitude": _valid_coord(ln.get("Longitude")),
+        "update_time": _hhmm(ln.get("UpdateTime")),
         "is_cancelled": False,
     }
 
@@ -217,24 +271,27 @@ def in_commute_window(start_str: str, end_str: str, now_time=None) -> bool:
     return now_time >= start or now_time <= end
 
 
-def minutes_until(departure_hhmm: str, now_dt=None) -> int | None:
-    """Minutes from now until a HH:MM departure today.
-    Returns None if unparseable. Handles departures up to ~3h past midnight
-    by rolling forward when the time looks like it's already passed by a lot."""
-    if not departure_hhmm:
+def minutes_until(departure_time: str, now_dt=None) -> int | None:
+    """Minutes from now until a departure.
+
+    Accepts either a full 'YYYY-MM-DD HH:MM:SS' datetime (preferred — has the
+    date, so no rollover guessing needed) or a bare 'HH:MM'. Returns None if
+    unparseable."""
+    if not departure_time:
         return None
     if now_dt is None:
         now_dt = datetime.now()
-    try:
-        dep = datetime.strptime(departure_hhmm, "%H:%M")
-    except ValueError:
+    dep = _parse_api_time(departure_time)
+    if dep is None:
         return None
-    dep_today = now_dt.replace(hour=dep.hour, minute=dep.minute, second=0, microsecond=0)
-    diff = int((dep_today - now_dt).total_seconds() / 60)
-    # If the departure appears to be well in the past (>180 min), it's tomorrow's
-    if diff < -180:
-        diff += 24 * 60
-    return diff
+    # If the parsed value has no real date (bare HH:MM -> year 1900), anchor to today
+    if dep.year == 1900:
+        dep = now_dt.replace(hour=dep.hour, minute=dep.minute, second=0, microsecond=0)
+        diff = int((dep - now_dt).total_seconds() / 60)
+        if diff < -180:
+            diff += 24 * 60
+        return diff
+    return int((dep - now_dt).total_seconds() / 60)
 
 
 def is_catchable(

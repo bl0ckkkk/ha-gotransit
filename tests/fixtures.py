@@ -2,24 +2,24 @@
 
 # Stop/NextService — flat Lines array (the schema we fixed to)
 NEXT_SERVICE_NORMAL = {
-    "Metadata": {"TimeStamp": "2026-06-20 07:08:00", "ErrorCode": "200", "ErrorMessage": ""},
+    "Metadata": {"TimeStamp": "2026-06-20 07:08:00", "ErrorCode": "200", "ErrorMessage": "OK"},
     "NextService": {
         "Lines": [
             {
                 "StopCode": "BU", "LineCode": "LW", "LineName": "Lakeshore West",
-                "ServiceType": "T", "DirectionCode": "E", "DirectionName": "Union Station",
-                "ScheduledDepartureTime": "07:12", "ComputedDepartureTime": "07:19",
-                "DepartureStatus": "D", "ScheduledPlatform": "2", "ActualPlatform": "3",
-                "TripOrder": 2, "TripNumber": "1234", "UpdateTime": "07:08",
-                "Status": "Delayed", "Latitude": 43.3841, "Longitude": -79.8053,
+                "ServiceType": "T", "DirectionCode": "LW", "DirectionName": "LW - Union Station",
+                "ScheduledDepartureTime": "2026-06-20 07:12:00", "ComputedDepartureTime": "2026-06-20 07:19:00",
+                "DepartureStatus": "E", "ScheduledPlatform": "3", "ActualPlatform": "",
+                "TripOrder": 2, "TripNumber": "1234", "UpdateTime": "2026-06-20 07:08:00",
+                "Status": "S", "Latitude": 43.3140, "Longitude": -79.8530,
             },
             {
                 "StopCode": "BU", "LineCode": "LW", "LineName": "Lakeshore West",
-                "ServiceType": "T", "DirectionCode": "E", "DirectionName": "Union Station",
-                "ScheduledDepartureTime": "06:42", "ComputedDepartureTime": "06:42",
-                "DepartureStatus": "O", "ScheduledPlatform": "2", "ActualPlatform": "2",
-                "TripOrder": 1, "TripNumber": "1232", "UpdateTime": "07:08",
-                "Status": "On Time", "Latitude": 43.40, "Longitude": -79.78,
+                "ServiceType": "T", "DirectionCode": "LW", "DirectionName": "LW - Aldershot GO",
+                "ScheduledDepartureTime": "2026-06-20 06:42:00", "ComputedDepartureTime": "2026-06-20 06:42:00",
+                "DepartureStatus": "E", "ScheduledPlatform": "1", "ActualPlatform": "",
+                "TripOrder": 1, "TripNumber": "1232", "UpdateTime": "2026-06-20 07:08:00",
+                "Status": "S", "Latitude": -1.0, "Longitude": -1.0,
             },
         ]
     },
@@ -30,11 +30,11 @@ NEXT_SERVICE_SINGLE_DICT = {
     "NextService": {
         "Lines": {
             "StopCode": "BU", "LineCode": "LW", "LineName": "Lakeshore West",
-            "ServiceType": "T", "DirectionCode": "E", "DirectionName": "Union Station",
-            "ScheduledDepartureTime": "07:12", "ComputedDepartureTime": "07:12",
-            "DepartureStatus": "O", "ScheduledPlatform": "2", "ActualPlatform": "2",
-            "TripOrder": 1, "TripNumber": "5678", "UpdateTime": "07:08",
-            "Status": "On Time", "Latitude": 43.38, "Longitude": -79.80,
+            "ServiceType": "T", "DirectionCode": "LW", "DirectionName": "LW - Union Station",
+            "ScheduledDepartureTime": "2026-06-20 07:12:00", "ComputedDepartureTime": "2026-06-20 07:12:00",
+            "DepartureStatus": "E", "ScheduledPlatform": "2", "ActualPlatform": "",
+            "TripOrder": 1, "TripNumber": "5678", "UpdateTime": "2026-06-20 07:08:00",
+            "Status": "S", "Latitude": -1.0, "Longitude": -1.0,
         }
     },
 }
@@ -48,12 +48,12 @@ NEXT_SERVICE_EMPTY = {
 NEXT_SERVICE_MIXED = {
     "NextService": {
         "Lines": [
-            {"LineCode": "LE", "LineName": "Lakeshore East", "TripOrder": 1,
-             "TripNumber": "9999", "ScheduledDepartureTime": "07:05",
-             "ComputedDepartureTime": "07:05", "DirectionName": "Oshawa"},
-            {"LineCode": "LW", "LineName": "Lakeshore West", "TripOrder": 2,
-             "TripNumber": "1234", "ScheduledDepartureTime": "07:12",
-             "ComputedDepartureTime": "07:19", "DirectionName": "Union Station"},
+            {"LineCode": "LE", "LineName": "Lakeshore East", "DirectionName": "LE - Oshawa GO",
+             "TripOrder": 1, "TripNumber": "9999",
+             "ScheduledDepartureTime": "2026-06-20 07:05:00", "ComputedDepartureTime": "2026-06-20 07:05:00"},
+            {"LineCode": "LW", "LineName": "Lakeshore West", "DirectionName": "LW - Union Station",
+             "TripOrder": 2, "TripNumber": "1234",
+             "ScheduledDepartureTime": "2026-06-20 07:12:00", "ComputedDepartureTime": "2026-06-20 07:19:00"},
         ]
     },
 }

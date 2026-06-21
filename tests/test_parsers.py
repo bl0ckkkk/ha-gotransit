@@ -57,45 +57,55 @@ def test_delay_negative_early():
 # parse_next_service
 # ----------------------------------------------------------------------------
 
-def test_next_service_picks_lowest_triporder():
-    # Two trips, TripOrder 1 and 2 — must pick order 1 (1232)
-    result = parsers.parse_next_service(fx.NEXT_SERVICE_NORMAL, "LW")
-    assert result["trip_number"] == "1232"
-    assert result["scheduled_platform"] == "2"
+def test_next_service_picks_earliest_to_destination():
+    # Two LW trips; only 1234 goes to Union. Must pick it, not the Aldershot one.
+    result = parsers.parse_next_service(fx.NEXT_SERVICE_NORMAL, "LW", "Union")
+    assert result["trip_number"] == "1234"
+    assert result["scheduled_platform"] == "3"
 
-def test_next_service_delayed_fields():
-    result = parsers.parse_next_service(fx.NEXT_SERVICE_NORMAL, "LW")
-    # Lowest order trip 1232 is on time; verify field mapping is complete
-    assert result["destination"] == "Union Station"
-    assert result["line_name"] == "Lakeshore West"
-    assert result["computed_time"] == "06:42"
+def test_next_service_destination_filter_excludes_other_dirs():
+    result = parsers.parse_next_service(fx.NEXT_SERVICE_NORMAL, "LW", "Union")
+    assert "Union" in result["destination"]
+
+def test_next_service_times_converted_to_hhmm():
+    result = parsers.parse_next_service(fx.NEXT_SERVICE_NORMAL, "LW", "Union")
+    assert result["computed_time"] == "07:19"
+    assert result["scheduled_time"] == "07:12"
+
+def test_next_service_delay_from_datetimes():
+    # 1234: scheduled 07:12, computed 07:19 = 7 min
+    result = parsers.parse_next_service(fx.NEXT_SERVICE_NORMAL, "LW", "Union")
+    assert result["delay_minutes"] == 7
+
+def test_next_service_gps_sentinel_nulled():
+    # 1234 has real coords; confirm they pass through
+    result = parsers.parse_next_service(fx.NEXT_SERVICE_NORMAL, "LW", "Union")
+    assert result["latitude"] == 43.3140
 
 def test_next_service_single_dict():
-    result = parsers.parse_next_service(fx.NEXT_SERVICE_SINGLE_DICT, "LW")
+    result = parsers.parse_next_service(fx.NEXT_SERVICE_SINGLE_DICT, "LW", "Union")
     assert result["trip_number"] == "5678"
+    # -1.0 coords must be nulled
+    assert result["latitude"] is None
 
 def test_next_service_empty():
-    assert parsers.parse_next_service(fx.NEXT_SERVICE_EMPTY, "LW") is None
+    assert parsers.parse_next_service(fx.NEXT_SERVICE_EMPTY, "LW", "Union") is None
 
 def test_next_service_line_filter():
-    # Mixed LE + LW; filtering to LW must skip the LE trip even though it's TripOrder 1
-    result = parsers.parse_next_service(fx.NEXT_SERVICE_MIXED, "LW")
+    # Mixed LE + LW, want Union on LW -> trip 1234
+    result = parsers.parse_next_service(fx.NEXT_SERVICE_MIXED, "LW", "Union")
     assert result["trip_number"] == "1234"
     assert result["line_code"] == "LW"
 
-def test_next_service_no_filter_takes_any():
-    # No line code — takes the lowest TripOrder regardless of line (LE trip)
-    result = parsers.parse_next_service(fx.NEXT_SERVICE_MIXED, "")
-    assert result["trip_number"] == "9999"
+def test_next_service_no_destination_takes_earliest():
+    # No destination filter -> earliest by clock; in NORMAL that's 1232 at 06:42
+    result = parsers.parse_next_service(fx.NEXT_SERVICE_NORMAL, "LW", "")
+    assert result["trip_number"] == "1232"
 
 def test_next_service_is_cancelled_defaults_false():
-    result = parsers.parse_next_service(fx.NEXT_SERVICE_NORMAL, "LW")
+    result = parsers.parse_next_service(fx.NEXT_SERVICE_NORMAL, "LW", "Union")
     assert result["is_cancelled"] is False
 
-
-# ----------------------------------------------------------------------------
-# parse_consist
-# ----------------------------------------------------------------------------
 
 def test_consist_match_coach_count():
     result = parsers.parse_consist(fx.CONSIST_ALL, "1234")
@@ -243,24 +253,29 @@ from datetime import datetime as _dt
 
 def test_minutes_until_future():
     now = _dt(2026, 6, 20, 7, 0)
-    assert parsers.minutes_until("07:19", now) == 19
+    assert parsers.minutes_until("2026-06-20 07:19:00", now) == 19
 
 def test_minutes_until_now():
     now = _dt(2026, 6, 20, 7, 19)
-    assert parsers.minutes_until("07:19", now) == 0
+    assert parsers.minutes_until("2026-06-20 07:19:00", now) == 0
 
 def test_minutes_until_just_passed():
     now = _dt(2026, 6, 20, 7, 20)
-    assert parsers.minutes_until("07:19", now) == -1
+    assert parsers.minutes_until("2026-06-20 07:19:00", now) == -1
 
-def test_minutes_until_rolls_to_tomorrow():
-    # 00:30 train viewed at 23:00 — should be ~90 min, not -1350
+def test_minutes_until_bare_hhmm_rolls_to_tomorrow():
+    # Bare HH:MM (no date): 00:30 viewed at 23:00 -> ~90 min via rollover
     now = _dt(2026, 6, 20, 23, 0)
     assert parsers.minutes_until("00:30", now) == 90
 
 def test_minutes_until_bad():
     assert parsers.minutes_until("garbage", _dt(2026,6,20,7,0)) is None
     assert parsers.minutes_until("", _dt(2026,6,20,7,0)) is None
+
+def test_minutes_until_full_datetime_no_rollover_guess():
+    # Full datetime in the past stays negative (real date present, no guessing)
+    now = _dt(2026, 6, 20, 12, 0)
+    assert parsers.minutes_until("2026-06-20 07:00:00", now) == -300
 
 
 # ----------------------------------------------------------------------------

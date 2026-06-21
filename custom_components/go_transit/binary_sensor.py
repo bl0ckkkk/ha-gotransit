@@ -73,7 +73,10 @@ class GoTransitCatchableSensor(CoordinatorEntity[DepartureCoordinator], BinarySe
         dep = (self.coordinator.data or {}).get("next_departure")
         if not dep:
             return False
-        departure_time = dep.get("computed_time") or dep.get("scheduled_time")
+        departure_time = (
+            dep.get("computed_datetime") or dep.get("scheduled_datetime")
+            or dep.get("computed_time") or dep.get("scheduled_time")
+        )
         mins = parsers.minutes_until(departure_time)
         travel = self._travel_minutes()
         return parsers.is_catchable(mins, travel, dep.get("is_cancelled", False))
@@ -81,7 +84,10 @@ class GoTransitCatchableSensor(CoordinatorEntity[DepartureCoordinator], BinarySe
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         dep = (self.coordinator.data or {}).get("next_departure") or {}
-        departure_time = dep.get("computed_time") or dep.get("scheduled_time")
+        departure_time = (
+            dep.get("computed_datetime") or dep.get("scheduled_datetime")
+            or dep.get("computed_time") or dep.get("scheduled_time")
+        )
         mins = parsers.minutes_until(departure_time)
         travel = self._travel_minutes()
         return {
