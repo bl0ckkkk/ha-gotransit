@@ -230,6 +230,7 @@ def test_trains_no_filter():
 
 def test_journey_basic():
     result = parsers.parse_journey(fx.JOURNEY_ALL)
+    # Two distinct departures; the 07:12 transfer variant is deduped out.
     assert len(result) == 2
     assert result[0]["trip_number"] == "1234"
     assert result[0]["departure_time"] == "07:12"
@@ -237,11 +238,23 @@ def test_journey_basic():
     assert result[0]["line"] == "LW"
     assert result[0]["transfers"] == 0
 
+def test_journey_dedupes_to_direct_train():
+    # The 07:12 row must be the direct (0-transfer) option, not the connecting one.
+    result = parsers.parse_journey(fx.JOURNEY_ALL)
+    dep_0712 = [r for r in result if r["departure_time"] == "07:12"]
+    assert len(dep_0712) == 1
+    assert dep_0712[0]["transfers"] == 0
+    assert dep_0712[0]["arrival_time"] == "08:14"
+
 def test_journey_single_trip_dict():
     # Trips.Trip can be a dict rather than a list
     result = parsers.parse_journey(fx.JOURNEY_ALL)
     assert result[1]["trip_number"] == "1236"
     assert result[1]["departure_time"] == "07:42"
+
+def test_journey_sorted_by_departure():
+    result = parsers.parse_journey(fx.JOURNEY_ALL)
+    assert [r["departure_time"] for r in result] == ["07:12", "07:42"]
 
 def test_journey_empty():
     assert parsers.parse_journey(fx.JOURNEY_EMPTY) == []

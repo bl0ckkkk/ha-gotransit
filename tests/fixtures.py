@@ -58,31 +58,37 @@ NEXT_SERVICE_MIXED = {
     },
 }
 
-# Schedule/Journey — SchJourneys[].Services[].Trips.Trip[]
+# Schedule/Journey — one SchJourneys group whose Services list holds the
+# itinerary options. Includes a transfer-variant duplicate of the 07:12
+# departure that should be collapsed in favour of the direct (0-transfer) one.
 JOURNEY_ALL = {
     "Metadata": {"TimeStamp": "2026-06-21 07:00:00", "ErrorCode": "200", "ErrorMessage": "OK"},
     "SchJourneys": [
         {
-            "Date": "2026-06-21", "Time": "07:00", "To": "UN", "From": "BU", "Duration": "01:02:00",
+            "Date": "2026-06-21", "Time": "07:00", "To": "UN", "From": "BU",
             "Services": [
-                {
-                    "Type": "T", "Direction": "E", "Code": "LW",
+                {  # direct 07:12 departure
+                    "Type": "RB", "Direction": "E", "Code": "01",
                     "StartTime": "2026-06-21 07:12:00", "EndTime": "2026-06-21 08:14:00",
-                    "Duration": "01:02:00",
+                    "Duration": "01:02:00", "transferCount": 0,
                     "Trips": {"Trip": [
                         {"Number": "1234", "Display": "LW - Union Station", "Line": "LW",
                          "Direction": "E", "Type": "T"},
                     ]},
                 },
-            ],
-        },
-        {
-            "Date": "2026-06-21", "Time": "07:42", "To": "UN", "From": "BU", "Duration": "01:00:00",
-            "Services": [
-                {
-                    "Type": "T", "Direction": "E", "Code": "LW",
+                {  # same 07:12 departure but via a transfer — should be deduped out
+                    "Type": "RB", "Direction": "E", "Code": "01",
+                    "StartTime": "2026-06-21 07:12:00", "EndTime": "2026-06-21 08:30:00",
+                    "Duration": "01:18:00", "transferCount": 1,
+                    "Trips": {"Trip": [
+                        {"Number": "1234", "Display": "LW - Union Station", "Line": "LW"},
+                        {"Number": "1338", "Display": "LW - Union Station", "Line": "LW"},
+                    ]},
+                },
+                {  # later direct departure; Trips.Trip as a dict (API inconsistency)
+                    "Type": "RB", "Direction": "E", "Code": "01",
                     "StartTime": "2026-06-21 07:42:00", "EndTime": "2026-06-21 08:42:00",
-                    "Duration": "01:00:00",
+                    "Duration": "01:00:00", "transferCount": 0,
                     "Trips": {"Trip": {"Number": "1236", "Display": "LW - Union Station",
                                        "Line": "LW", "Direction": "E", "Type": "T"}},
                 },

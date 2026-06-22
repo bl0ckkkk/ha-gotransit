@@ -270,34 +270,43 @@ def parse_trains(raw: dict, line_code: str) -> list[dict]:
 
 
 def parse_journey(raw: dict) -> list[dict]:
-    """Parse Schedule/Journey into a flat list of upcoming trips.
+    """Parse Schedule/Journey into a flat list of upcoming departures.
 
-    The response nests each journey option under SchJourneys; every option has
-    one or more Services (more than one means a transfer), and each Service
-    holds its trains under Trips.Trip. We surface one row per journey option:
-    the first service's departure and the last service's arrival, so a journey
-    with a transfer still shows a single sensible departure/arrival pair.
-    Times come as 'YYYY-MM-DD HH:MM:SS'."""
-    out = []
+    SchJourneys holds one (or few) journey groups; each group's Services list
+    is the set of itinerary *options*. Every Service is one option whose legs
+    sit under Trips.Trip (more than one leg = a transfer). We emit one row per
+    Service — departure = Service.StartTime, arrival = Service.EndTime, trip =
+    the first leg's Number (the train you board) — then dedupe by departure
+    time keeping the option with the fewest transfers (the direct train wins
+    over connecting variants) and sort by departure. Times come as
+    'YYYY-MM-DD HH:MM:SS'."""
+    by_departure: dict[str, dict] = {}
     for journey in _as_list(raw.get("SchJourneys")):
-        services = _as_list(journey.get("Services"))
-        if not services:
-            continue
-        first, last = services[0], services[-1]
-        trips = _as_list(first.get("Trips", {}).get("Trip"))
-        trip0 = trips[0] if trips else {}
-        out.append({
-            "trip_number": trip0.get("Number"),
-            "departure_time": _hhmm(first.get("StartTime")),
-            "arrival_time": _hhmm(last.get("EndTime")),
-            "departure_datetime": first.get("StartTime"),
-            "arrival_datetime": last.get("EndTime"),
-            "duration": journey.get("Duration") or first.get("Duration"),
-            "line": trip0.get("Line"),
-            "destination": str(trip0.get("Display", "")).strip() or None,
-            "transfers": max(len(services) - 1, 0),
-        })
-    return out
+        for service in _as_list(journey.get("Services")):
+            trips = _as_list(service.get("Trips", {}).get("Trip"))
+            if not trips:
+                continue
+            first_trip = trips[0]
+            dep_dt = service.get("StartTime")
+            try:
+                transfers = int(service.get("transferCount", len(trips) - 1))
+            except (ValueError, TypeError):
+                transfers = max(len(trips) - 1, 0)
+            row = {
+                "trip_number": first_trip.get("Number"),
+                "departure_time": _hhmm(dep_dt),
+                "arrival_time": _hhmm(service.get("EndTime")),
+                "departure_datetime": dep_dt,
+                "arrival_datetime": service.get("EndTime"),
+                "duration": service.get("Duration"),
+                "line": first_trip.get("Line"),
+                "destination": str(first_trip.get("Display", "")).strip() or None,
+                "transfers": transfers,
+            }
+            existing = by_departure.get(dep_dt)
+            if existing is None or transfers < existing["transfers"]:
+                by_departure[dep_dt] = row
+    return sorted(by_departure.values(), key=lambda r: r["departure_datetime"] or "")
 
 
 def in_commute_window(start_str: str, end_str: str, now_time=None) -> bool:
