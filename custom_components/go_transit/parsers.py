@@ -281,6 +281,10 @@ def minutes_until(departure_time: str, now_dt=None) -> int | None:
         return None
     if now_dt is None:
         now_dt = datetime.now()
+    # API times are naive local (Toronto wall-clock). Callers pass HA's
+    # tz-aware dt_util.now(); strip tzinfo so the subtraction stays naive.
+    if now_dt.tzinfo is not None:
+        now_dt = now_dt.replace(tzinfo=None)
     dep = _parse_api_time(departure_time)
     if dep is None:
         return None

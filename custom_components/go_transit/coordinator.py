@@ -13,13 +13,14 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Any
 
 import aiohttp
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from . import parsers
 from .const import (
@@ -123,7 +124,9 @@ class _GoTransitBase(DataUpdateCoordinator):
         """True if this coordinator should skip the fetch (outside service hours)."""
         if not self.pause_outside_service:
             return False
-        return not parsers.in_service_hours(self.service_start, self.service_end)
+        return not parsers.in_service_hours(
+            self.service_start, self.service_end, dt_util.now().time()
+        )
 
 
 class DepartureCoordinator(_GoTransitBase):
@@ -139,7 +142,7 @@ class DepartureCoordinator(_GoTransitBase):
         self.pause_outside_service = True
 
     async def _async_update_data(self) -> dict:
-        now = datetime.now()
+        now = dt_util.now()
         # Skip the fetch overnight when no trains run — preserve last data.
         if self._service_paused():
             return self.data or {
@@ -226,13 +229,15 @@ class VehicleCoordinator(_GoTransitBase):
         )
 
     async def _async_update_data(self) -> dict:
-        active = parsers.in_commute_window(self.commute_start, self.commute_end)
+        active = parsers.in_commute_window(
+            self.commute_start, self.commute_end, dt_util.now().time()
+        )
         self.update_interval = timedelta(
             seconds=INTERVAL_VEHICLES_ACTIVE if active else INTERVAL_VEHICLES_IDLE
         )
         result: dict[str, Any] = {
             "vehicle_positions": [], "in_commute_window": active,
-            "updated_at": datetime.now().isoformat(),
+            "updated_at": dt_util.now().isoformat(),
         }
         try:
             raw = await self._get("ServiceataGlance/Trains/All")
@@ -257,7 +262,7 @@ class AlertCoordinator(_GoTransitBase):
         )
 
     async def _async_update_data(self) -> dict:
-        result: dict[str, Any] = {"alerts": [], "updated_at": datetime.now().isoformat()}
+        result: dict[str, Any] = {"alerts": [], "updated_at": dt_util.now().isoformat()}
         try:
             raw = await self._get("ServiceUpdate/ServiceAlert/All")
             self.last_raw["alerts"] = raw
@@ -286,7 +291,7 @@ class ConsistCoordinator(_GoTransitBase):
     async def _async_update_data(self) -> dict:
         result: dict[str, Any] = {
             "coach_count": None, "engine_number": None, "consist_number": None,
-            "lineup": [], "trip_number": None, "updated_at": datetime.now().isoformat(),
+            "lineup": [], "trip_number": None, "updated_at": dt_util.now().isoformat(),
         }
         if self._service_paused():
             return self.data or result
@@ -324,7 +329,7 @@ class GuaranteeCoordinator(_GoTransitBase):
         result: dict[str, Any] = {
             "guarantee_active": False, "trip_number": None,
             "affected_stops": [], "reason": None,
-            "updated_at": datetime.now().isoformat(),
+            "updated_at": dt_util.now().isoformat(),
         }
         if self._service_paused():
             return self.data or result
@@ -332,7 +337,7 @@ class GuaranteeCoordinator(_GoTransitBase):
         if not trip_number:
             return result
         result["trip_number"] = trip_number
-        today = datetime.now().strftime("%Y%m%d")
+        today = dt_util.now().strftime("%Y%m%d")
         try:
             raw = await self._get(f"ServiceUpdate/ServiceGuarantee/{trip_number}/{today}")
             self.last_raw["guarantee"] = raw
