@@ -50,7 +50,7 @@ async def async_setup_entry(
         GoTransitDeparturesSensor(coords["departures"], entry),
         GoTransitVehiclePositionSensor(coords["vehicles"], entry),
         GoTransitAlertsSensor(coords["alerts"], entry),
-        GoTransitConsistSensor(coords["consist"], entry),
+        GoTransitConsistSensor(coords["consist"], coords["vehicles"], entry),
         GoTransitGuaranteeSensor(coords["guarantee"], entry),
     ])
 
@@ -298,8 +298,22 @@ class GoTransitAlertsSensor(CoordinatorEntity[AlertCoordinator], SensorEntity):
 
 
 class GoTransitConsistSensor(CoordinatorEntity[ConsistCoordinator], SensorEntity):
-    def __init__(self, coordinator: ConsistCoordinator, entry: ConfigEntry):
+    """Number of cars on the next train.
+
+    Primary source is the car count (`cars`) reported for the matching trip
+    in the live vehicle feed, which every API key can read. The detailed car
+    lineup from Fleet/Consist/All is layered on top *when available* — that
+    endpoint is restricted (403 for most keys), so it's treated as a bonus,
+    not a requirement."""
+
+    def __init__(
+        self,
+        coordinator: ConsistCoordinator,
+        vehicle_coordinator: VehicleCoordinator,
+        entry: ConfigEntry,
+    ):
         super().__init__(coordinator)
+        self._veh = vehicle_coordinator
         self._attr_has_entity_name = True
         self._attr_unique_id = f"{entry.entry_id}_{SENSOR_CONSIST}"
         self._attr_name = "Train Consist"
@@ -307,9 +321,24 @@ class GoTransitConsistSensor(CoordinatorEntity[ConsistCoordinator], SensorEntity
         self._attr_native_unit_of_measurement = "coaches"
         self._attr_device_info = _device(entry, coordinator.line_name)
 
+    def _vehicle_cars(self) -> int | None:
+        """Car count for the next-departure trip from the live vehicle feed."""
+        trip_number = (self.coordinator.data or {}).get("trip_number")
+        if not trip_number:
+            return None
+        for train in (self._veh.data or {}).get("vehicle_positions", []):
+            if str(train.get("trip_number", "")).strip() == str(trip_number).strip():
+                try:
+                    return int(train.get("cars"))
+                except (ValueError, TypeError):
+                    return None
+        return None
+
     @property
     def native_value(self) -> int | None:
-        return self.coordinator.data.get("coach_count")
+        # Fleet consist count if the endpoint is accessible, else the live
+        # vehicle feed's car count.
+        return self.coordinator.data.get("coach_count") or self._vehicle_cars()
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -319,8 +348,16 @@ class GoTransitConsistSensor(CoordinatorEntity[ConsistCoordinator], SensorEntity
             "consist_number": data.get("consist_number"),
             "engine_number": data.get("engine_number"),
             "lineup": data.get("lineup", []),
+            "cars_source": "fleet" if data.get("coach_count") else "vehicle_feed",
             "updated_at": data.get("updated_at"),
         }
+
+    async def async_added_to_hass(self) -> None:
+        """Also refresh when the vehicle coordinator updates."""
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            self._veh.async_add_listener(self.async_write_ha_state)
+        )
 
 
 class GoTransitGuaranteeSensor(CoordinatorEntity[GuaranteeCoordinator], SensorEntity):

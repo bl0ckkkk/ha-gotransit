@@ -241,20 +241,18 @@ updated_at: "2026-06-20T07:09:01.883"
 ---
 
 ### Train Consist
-**State:** Integer coach count (e.g. `10`). `None` if not yet matched.
+**State:** Integer car count for the next train (e.g. `12`). Sourced from the `Cars` value reported for the matching trip in the live vehicle feed (readable by every API key). The detailed car lineup from `Fleet/Consist/All` is layered on top **when available** — that endpoint is restricted (returns `403` for most keys), so the lineup may be empty while the car count still works.
 
 **Attributes:**
 ```yaml
-trip_number: "1234"
-consist_number: "C42"
-engine_number: "912"
-lineup:
+trip_number: "1038"
+consist_number: "C42"      # from Fleet/Consist/All when accessible
+engine_number: "912"       # "
+lineup:                      # " (empty when Fleet/Consist/All is 403)
   - order: 1
     type: "Locomotive"
     number: "912"
-  - order: 2
-    type: "BiLevel Coach"
-    number: "2341"
+cars_source: "vehicle_feed" # "vehicle_feed" or "fleet"
 updated_at: "2026-06-20T07:05:00.000"
 ```
 
