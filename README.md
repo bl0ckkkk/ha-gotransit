@@ -13,11 +13,13 @@ A HACS-compatible custom integration that brings live GO Transit data into Home 
 
 ## What it does
 
-Once installed, the integration creates a **device per monitored route** in Home Assistant, each with seven sensors, a catchable binary sensor, and a live train tracker:
+Once installed, the integration creates a **device per monitored route** in Home Assistant, each with nine sensors, a catchable binary sensor, and a live train tracker:
 
 | Sensor | What it shows |
 |--------|--------------|
-| **Next Departure** | The next train's departure time from your boarding station (computed time if available, scheduled otherwise) |
+| **Next Departure** | The next train's departure as a timestamp — Home Assistant renders it as the clock time plus a relative "in X minutes" countdown |
+| **Platform** | The boarding platform for your next train (actual track once posted, scheduled otherwise) |
+| **Status** | Human-readable `On time` / `Delayed` / `Cancelled` for your next train |
 | **Delay** | How many minutes late the next train is (0 = on time) |
 | **Upcoming Departures** | A count of upcoming trips with the full schedule list in attributes |
 | **Service Alerts** | Count of active alerts affecting your line, with full alert details in attributes |
@@ -98,7 +100,7 @@ All fields except boarding and destination stations can be changed anytime via t
 ## Sensor details
 
 ### Next Departure
-**State:** Departure time as `HH:MM` (computed time if the train is running, scheduled otherwise). `None` outside service hours.
+**State:** The next departure as a **timestamp** (`device_class: timestamp`) — a full timezone-aware datetime, which Home Assistant displays as the clock time plus a relative "in X minutes" countdown. Computed (live) time if the train is running, scheduled otherwise. `unavailable` outside service hours. The bare `HH:MM` values remain available as the `scheduled_time` / `computed_time` attributes.
 
 **Attributes:**
 ```yaml
@@ -120,6 +122,38 @@ stop_is_stopping: true
 latitude: 43.3841
 longitude: -79.8053
 update_time: "07:08"
+updated_at: "2026-06-20T07:08:34.112"
+```
+
+---
+
+### Platform
+**State:** The boarding platform for your next train — the actual track once Metrolinx posts it, falling back to the scheduled platform. `None` if neither is known yet.
+
+**Attributes:**
+```yaml
+scheduled_platform: "3"
+actual_platform: "2"
+track_confirmed: true   # true once the actual platform is assigned
+trip_number: "1234"
+updated_at: "2026-06-20T07:08:34.112"
+```
+
+> Tip: trigger a "your platform is posted" notification on `track_confirmed` flipping to `true`, or on the state changing.
+
+---
+
+### Status
+**State:** Human-readable `On time` / `Delayed` / `Cancelled` (`Unknown` when there's no upcoming train). Derived from cancellation and delay rather than the API's cryptic status codes (`device_class: enum`).
+
+**Attributes:**
+```yaml
+delay_minutes: 7
+departure_status: "E"      # raw API code
+raw_status: "S"            # raw API code
+is_cancelled: false
+stop_is_cancelled: false
+trip_number: "1234"
 updated_at: "2026-06-20T07:08:34.112"
 ```
 
