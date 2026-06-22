@@ -316,9 +316,9 @@ class GoTransitConsistSensor(CoordinatorEntity[ConsistCoordinator], SensorEntity
         self._veh = vehicle_coordinator
         self._attr_has_entity_name = True
         self._attr_unique_id = f"{entry.entry_id}_{SENSOR_CONSIST}"
-        self._attr_name = "Train Consist"
+        self._attr_name = "Cars"
         self._attr_icon = "mdi:train-car-passenger"
-        self._attr_native_unit_of_measurement = "coaches"
+        self._attr_native_unit_of_measurement = "cars"
         self._attr_device_info = _device(entry, coordinator.line_name)
 
     def _vehicle_cars(self) -> int | None:

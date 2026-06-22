@@ -24,7 +24,7 @@ Once installed, the integration creates a **device per monitored route** in Home
 | **Upcoming Departures** | A count of upcoming trips with the full schedule list in attributes |
 | **Service Alerts** | Count of active alerts affecting your line, with full alert details in attributes |
 | **Active Trains** | Number of trains currently running on your line, with position data in attributes |
-| **Train Consist** | Coach count for your next train (e.g. 10 or 12), with the full car lineup in attributes |
+| **Cars** | Number of cars on your next train (e.g. 10 or 12), with the full car lineup in attributes when available |
 | **Service Guarantee** | Whether GO's delay refund guarantee applies to your trip |
 | **Catchable** (binary) | `On` when you can still make the next train from your platform, given live travel time |
 | **Train** (device_tracker) | Live position of your train on HA's map |
@@ -240,7 +240,7 @@ updated_at: "2026-06-20T07:09:01.883"
 
 ---
 
-### Train Consist
+### Cars
 **State:** Integer car count for the next train (e.g. `12`). Sourced from the `Cars` value reported for the matching trip in the live vehicle feed (readable by every API key). The detailed car lineup from `Fleet/Consist/All` is layered on top **when available** — that endpoint is restricted (returns `403` for most keys), so the lineup may be empty while the car count still works.
 
 **Attributes:**
