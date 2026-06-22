@@ -69,8 +69,9 @@ class GoTransitNextDepartureSensor(CoordinatorEntity[DepartureCoordinator], Sens
 
     def __init__(self, coordinator: DepartureCoordinator, entry: ConfigEntry):
         super().__init__(coordinator)
+        self._attr_has_entity_name = True
         self._attr_unique_id = f"{entry.entry_id}_{SENSOR_NEXT_DEPARTURE}"
-        self._attr_name = f"{entry.title} — Next Departure"
+        self._attr_name = "Next Departure"
         self._attr_icon = "mdi:train"
         self._attr_device_info = _device(entry, coordinator.line_name)
 
@@ -135,8 +136,9 @@ class GoTransitPlatformSensor(CoordinatorEntity[DepartureCoordinator], SensorEnt
 
     def __init__(self, coordinator: DepartureCoordinator, entry: ConfigEntry):
         super().__init__(coordinator)
+        self._attr_has_entity_name = True
         self._attr_unique_id = f"{entry.entry_id}_{SENSOR_PLATFORM}"
-        self._attr_name = f"{entry.title} — Platform"
+        self._attr_name = "Platform"
         self._attr_icon = "mdi:bus-stop"
         self._attr_device_info = _device(entry, coordinator.line_name)
 
@@ -168,8 +170,9 @@ class GoTransitStatusSensor(CoordinatorEntity[DepartureCoordinator], SensorEntit
 
     def __init__(self, coordinator: DepartureCoordinator, entry: ConfigEntry):
         super().__init__(coordinator)
+        self._attr_has_entity_name = True
         self._attr_unique_id = f"{entry.entry_id}_{SENSOR_STATUS}"
-        self._attr_name = f"{entry.title} — Status"
+        self._attr_name = "Status"
         self._attr_icon = "mdi:information-outline"
         self._attr_device_info = _device(entry, coordinator.line_name)
 
@@ -202,8 +205,9 @@ class GoTransitStatusSensor(CoordinatorEntity[DepartureCoordinator], SensorEntit
 class GoTransitDelaySensor(CoordinatorEntity[DepartureCoordinator], SensorEntity):
     def __init__(self, coordinator: DepartureCoordinator, entry: ConfigEntry):
         super().__init__(coordinator)
+        self._attr_has_entity_name = True
         self._attr_unique_id = f"{entry.entry_id}_{SENSOR_DELAY}"
-        self._attr_name = f"{entry.title} — Delay"
+        self._attr_name = "Delay"
         self._attr_icon = "mdi:clock-alert-outline"
         self._attr_native_unit_of_measurement = "min"
         self._attr_device_info = _device(entry, coordinator.line_name)
@@ -229,8 +233,9 @@ class GoTransitDelaySensor(CoordinatorEntity[DepartureCoordinator], SensorEntity
 class GoTransitDeparturesSensor(CoordinatorEntity[DepartureCoordinator], SensorEntity):
     def __init__(self, coordinator: DepartureCoordinator, entry: ConfigEntry):
         super().__init__(coordinator)
+        self._attr_has_entity_name = True
         self._attr_unique_id = f"{entry.entry_id}_{SENSOR_DEPARTURES}"
-        self._attr_name = f"{entry.title} — Upcoming Departures"
+        self._attr_name = "Upcoming Departures"
         self._attr_icon = "mdi:train-variant"
         self._attr_device_info = _device(entry, coordinator.line_name)
 
@@ -251,8 +256,9 @@ class GoTransitDeparturesSensor(CoordinatorEntity[DepartureCoordinator], SensorE
 class GoTransitVehiclePositionSensor(CoordinatorEntity[VehicleCoordinator], SensorEntity):
     def __init__(self, coordinator: VehicleCoordinator, entry: ConfigEntry):
         super().__init__(coordinator)
+        self._attr_has_entity_name = True
         self._attr_unique_id = f"{entry.entry_id}_{SENSOR_VEHICLE_POSITION}"
-        self._attr_name = f"{entry.title} — Active Trains"
+        self._attr_name = "Active Trains"
         self._attr_icon = "mdi:train-car"
         self._attr_device_info = _device(entry, coordinator.line_name)
 
@@ -273,8 +279,9 @@ class GoTransitVehiclePositionSensor(CoordinatorEntity[VehicleCoordinator], Sens
 class GoTransitAlertsSensor(CoordinatorEntity[AlertCoordinator], SensorEntity):
     def __init__(self, coordinator: AlertCoordinator, entry: ConfigEntry):
         super().__init__(coordinator)
+        self._attr_has_entity_name = True
         self._attr_unique_id = f"{entry.entry_id}_{SENSOR_ALERTS}"
-        self._attr_name = f"{entry.title} — Service Alerts"
+        self._attr_name = "Service Alerts"
         self._attr_icon = "mdi:alert-circle-outline"
         self._attr_device_info = _device(entry, coordinator.line_name)
 
@@ -293,8 +300,9 @@ class GoTransitAlertsSensor(CoordinatorEntity[AlertCoordinator], SensorEntity):
 class GoTransitConsistSensor(CoordinatorEntity[ConsistCoordinator], SensorEntity):
     def __init__(self, coordinator: ConsistCoordinator, entry: ConfigEntry):
         super().__init__(coordinator)
+        self._attr_has_entity_name = True
         self._attr_unique_id = f"{entry.entry_id}_{SENSOR_CONSIST}"
-        self._attr_name = f"{entry.title} — Train Consist"
+        self._attr_name = "Train Consist"
         self._attr_icon = "mdi:train-car-passenger"
         self._attr_native_unit_of_measurement = "coaches"
         self._attr_device_info = _device(entry, coordinator.line_name)
@@ -320,8 +328,9 @@ class GoTransitGuaranteeSensor(CoordinatorEntity[GuaranteeCoordinator], SensorEn
 
     def __init__(self, coordinator: GuaranteeCoordinator, entry: ConfigEntry):
         super().__init__(coordinator)
+        self._attr_has_entity_name = True
         self._attr_unique_id = f"{entry.entry_id}_{SENSOR_GUARANTEE}"
-        self._attr_name = f"{entry.title} — Service Guarantee"
+        self._attr_name = "Service Guarantee"
         self._attr_icon = "mdi:shield-check-outline"
         self._attr_device_info = _device(entry, coordinator.line_name)
 

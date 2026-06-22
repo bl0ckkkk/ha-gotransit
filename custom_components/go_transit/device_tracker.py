@@ -46,8 +46,9 @@ class GoTransitTrainTracker(CoordinatorEntity[VehicleCoordinator], TrackerEntity
         super().__init__(vehicle_coordinator)
         self._dep = departure_coordinator
         self._entry = entry
+        self._attr_has_entity_name = True
         self._attr_unique_id = f"{entry.entry_id}_{TRACKER_TRAIN}"
-        self._attr_name = f"{entry.title} — Train"
+        self._attr_name = "Train"
         self._attr_icon = "mdi:train"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
