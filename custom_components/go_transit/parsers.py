@@ -81,7 +81,7 @@ def parse_next_service(raw: dict, line_code: str, destination: str = "") -> dict
     (TripOrder is per-direction and unreliable across mixed directions).
 
     Times come as 'YYYY-MM-DD HH:MM:SS'. Coordinates use -1.0 as 'no GPS'."""
-    lines = _as_list(raw.get("NextService", {}).get("Lines"))
+    lines = _as_list((raw.get("NextService") or {}).get("Lines"))
 
     # Filter by line code (trailing whitespace tolerated)
     candidates = [
@@ -141,7 +141,7 @@ def parse_consist(raw: dict, trip_number: str) -> dict:
     }
     if not trip_number:
         return result
-    consists = _as_list(raw.get("AllConsists", {}).get("Consists"))
+    consists = _as_list((raw.get("AllConsists") or {}).get("Consists"))
     matched = None
     for consist in consists:
         for trip in _as_list(consist.get("RemainingTrip")):
@@ -194,7 +194,7 @@ def parse_exceptions(raw: dict, trip_number: str, from_stop_code: str) -> dict:
 def parse_guarantee(raw: dict, from_stop_code: str) -> dict:
     """Parse ServiceGuarantee for whether a refund guarantee applies."""
     result = {"guarantee_active": False, "affected_stops": [], "reason": None}
-    stops = _as_list(raw.get("Stops", {}).get("Stop"))
+    stops = _as_list((raw.get("Stops") or {}).get("Stop"))
     if not stops:
         return result
     result["guarantee_active"] = True
@@ -215,7 +215,7 @@ def parse_guarantee(raw: dict, from_stop_code: str) -> dict:
 
 def parse_alerts(raw: dict, line_code: str) -> list[dict]:
     """Parse ServiceAlert/All filtered to a line (plus system-wide alerts)."""
-    all_alerts = _as_list(raw.get("ServiceAlerts", {}).get("ServiceAlert"))
+    all_alerts = _as_list((raw.get("ServiceAlerts") or {}).get("ServiceAlert"))
     filtered = [
         a for a in all_alerts
         if not line_code
@@ -241,7 +241,7 @@ def parse_trains(raw: dict, line_code: str) -> list[dict]:
     The feed nests live trips under Trips.Trip. Each trip carries its delay
     as DelaySeconds, motion as IsInMotion, destination as Display, and uses
     -1.0 as the 'no GPS' sentinel for coordinates."""
-    trips = _as_list(raw.get("Trips", {}).get("Trip"))
+    trips = _as_list((raw.get("Trips") or {}).get("Trip"))
     line_trains = [
         t for t in trips
         if not line_code or str(t.get("LineCode", "")).strip().upper() == line_code.strip().upper()
@@ -283,7 +283,7 @@ def parse_journey(raw: dict) -> list[dict]:
     by_departure: dict[str, dict] = {}
     for journey in _as_list(raw.get("SchJourneys")):
         for service in _as_list(journey.get("Services")):
-            trips = _as_list(service.get("Trips", {}).get("Trip"))
+            trips = _as_list((service.get("Trips") or {}).get("Trip"))
             if not trips:
                 continue
             first_trip = trips[0]
