@@ -45,8 +45,9 @@ class GoTransitCatchableSensor(CoordinatorEntity[DepartureCoordinator], BinarySe
         super().__init__(coordinator)
         self._hass = hass
         self._entry = entry
+        self._attr_has_entity_name = True
         self._attr_unique_id = f"{entry.entry_id}_{BINARY_CATCHABLE}"
-        self._attr_name = f"{entry.title} — Catchable"
+        self._attr_name = "Catchable"
         self._attr_icon = "mdi:run-fast"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},

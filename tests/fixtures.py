@@ -58,6 +58,41 @@ NEXT_SERVICE_MIXED = {
     },
 }
 
+# Schedule/Journey — SchJourneys[].Services[].Trips.Trip[]
+JOURNEY_ALL = {
+    "Metadata": {"TimeStamp": "2026-06-21 07:00:00", "ErrorCode": "200", "ErrorMessage": "OK"},
+    "SchJourneys": [
+        {
+            "Date": "2026-06-21", "Time": "07:00", "To": "UN", "From": "BU", "Duration": "01:02:00",
+            "Services": [
+                {
+                    "Type": "T", "Direction": "E", "Code": "LW",
+                    "StartTime": "2026-06-21 07:12:00", "EndTime": "2026-06-21 08:14:00",
+                    "Duration": "01:02:00",
+                    "Trips": {"Trip": [
+                        {"Number": "1234", "Display": "LW - Union Station", "Line": "LW",
+                         "Direction": "E", "Type": "T"},
+                    ]},
+                },
+            ],
+        },
+        {
+            "Date": "2026-06-21", "Time": "07:42", "To": "UN", "From": "BU", "Duration": "01:00:00",
+            "Services": [
+                {
+                    "Type": "T", "Direction": "E", "Code": "LW",
+                    "StartTime": "2026-06-21 07:42:00", "EndTime": "2026-06-21 08:42:00",
+                    "Duration": "01:00:00",
+                    "Trips": {"Trip": {"Number": "1236", "Display": "LW - Union Station",
+                                       "Line": "LW", "Direction": "E", "Type": "T"}},
+                },
+            ],
+        },
+    ],
+}
+
+JOURNEY_EMPTY = {"Metadata": {"ErrorCode": "200"}, "SchJourneys": []}
+
 # Fleet/Consist/All
 CONSIST_ALL = {
     "AllConsists": {
@@ -144,16 +179,17 @@ ALERTS_ALL = {
     },
 }
 
-# Trains
+# Trains — ServiceataGlance/Trains/All (live shape: Trips.Trip)
 TRAINS_ALL = {
-    "ServiceataGlance": {
-        "Trains": {
-            "Train": [
-                {"TripNumber": "1234", "LineCode": "LW", "Direction": "Inbound",
-                 "Latitude": 43.38, "Longitude": -79.80, "NextStopCode": "OA", "Status": "On Time"},
-                {"TripNumber": "9999", "LineCode": "LE", "Direction": "Outbound",
-                 "Latitude": 43.50, "Longitude": -79.40, "NextStopCode": "PI", "Status": "On Time"},
-            ]
-        }
+    "Metadata": {"TimeStamp": "2026-06-21 21:39:58", "ErrorCode": "200", "ErrorMessage": "OK"},
+    "Trips": {
+        "Trip": [
+            {"Cars": "12", "TripNumber": "1234", "LineCode": "LW", "RouteNumber": "LW   ",
+             "VariantDir": "E", "Display": "LW - Union Station", "Latitude": 43.38, "Longitude": -79.80,
+             "IsInMotion": True, "DelaySeconds": 66, "NextStopCode": "OA", "AtStationCode": None},
+            {"Cars": "10", "TripNumber": "9999", "LineCode": "LE", "RouteNumber": "LE   ",
+             "VariantDir": "E", "Display": "LE - Oshawa GO", "Latitude": 43.50, "Longitude": -79.40,
+             "IsInMotion": False, "DelaySeconds": -1, "NextStopCode": "PI", "AtStationCode": "RO"},
+        ]
     },
 }

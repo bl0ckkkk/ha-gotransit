@@ -170,24 +170,13 @@ class DepartureCoordinator(_GoTransitBase):
         # Journey schedule
         try:
             date_str = now.strftime("%Y%m%d")
-            time_str = now.strftime("%H:%M")
+            time_str = now.strftime("%H%M")  # API wants HHMM, not HH:MM (a colon -> HTTP 400)
             raw = await self._get(
                 f"Schedule/Journey/{date_str}/{self.from_stop_code}"
                 f"/{self.to_stop_code}/{time_str}/{self.max_departures}"
             )
             self.last_raw["journey"] = raw
-            journeys = parsers._as_list(raw.get("Journey", {}).get("Trips", {}).get("Trip"))
-            result["departures"] = [
-                {
-                    "trip_number": t.get("TripNumber"),
-                    "departure_time": t.get("DepartureTime"),
-                    "arrival_time": t.get("ArrivalTime"),
-                    "duration": t.get("Duration"),
-                    "line": t.get("LineName"),
-                    "status": t.get("Status", "Scheduled"),
-                }
-                for t in journeys
-            ]
+            result["departures"] = parsers.parse_journey(raw)
         except UpdateFailed as err:
             _LOGGER.warning("Journey fetch failed: %s", err)
         except Exception as err:  # noqa: BLE001
