@@ -21,6 +21,8 @@ from .const import (
     SENSOR_DEPARTURES,
     SENSOR_GUARANTEE,
     SENSOR_NEXT_DEPARTURE,
+    SENSOR_PLATFORM,
+    SENSOR_STATUS,
     SENSOR_VEHICLE_POSITION,
 )
 from .coordinator import (
@@ -42,6 +44,8 @@ async def async_setup_entry(
     coords = hass.data[DOMAIN][entry.entry_id]
     async_add_entities([
         GoTransitNextDepartureSensor(coords["departures"], entry),
+        GoTransitPlatformSensor(coords["departures"], entry),
+        GoTransitStatusSensor(coords["departures"], entry),
         GoTransitDelaySensor(coords["departures"], entry),
         GoTransitDeparturesSensor(coords["departures"], entry),
         GoTransitVehiclePositionSensor(coords["vehicles"], entry),
@@ -118,6 +122,79 @@ class GoTransitNextDepartureSensor(CoordinatorEntity[DepartureCoordinator], Sens
             "latitude": dep.get("latitude"),
             "longitude": dep.get("longitude"),
             "update_time": dep.get("update_time"),
+            "updated_at": self.coordinator.data.get("updated_at"),
+        }
+
+
+class GoTransitPlatformSensor(CoordinatorEntity[DepartureCoordinator], SensorEntity):
+    """Boarding platform for the next departure.
+
+    Reports the actual platform once GO posts it, falling back to the
+    scheduled platform. `track_confirmed` is True when the actual platform
+    is known — useful for a 'platform now posted' automation."""
+
+    def __init__(self, coordinator: DepartureCoordinator, entry: ConfigEntry):
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_{SENSOR_PLATFORM}"
+        self._attr_name = f"{entry.title} — Platform"
+        self._attr_icon = "mdi:bus-stop"
+        self._attr_device_info = _device(entry, coordinator.line_name)
+
+    @property
+    def native_value(self) -> str | None:
+        dep = self.coordinator.data.get("next_departure") or {}
+        return dep.get("actual_platform") or dep.get("scheduled_platform")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        dep = self.coordinator.data.get("next_departure") or {}
+        return {
+            "scheduled_platform": dep.get("scheduled_platform"),
+            "actual_platform": dep.get("actual_platform"),
+            "track_confirmed": bool(dep.get("actual_platform")),
+            "trip_number": dep.get("trip_number"),
+            "updated_at": self.coordinator.data.get("updated_at"),
+        }
+
+
+class GoTransitStatusSensor(CoordinatorEntity[DepartureCoordinator], SensorEntity):
+    """Human-readable status of the next departure.
+
+    Derived from cancellation + delay rather than the API's cryptic status
+    codes, which are kept as attributes."""
+
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = ["Cancelled", "Delayed", "On time", "Unknown"]
+
+    def __init__(self, coordinator: DepartureCoordinator, entry: ConfigEntry):
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_{SENSOR_STATUS}"
+        self._attr_name = f"{entry.title} — Status"
+        self._attr_icon = "mdi:information-outline"
+        self._attr_device_info = _device(entry, coordinator.line_name)
+
+    @property
+    def native_value(self) -> str:
+        dep = self.coordinator.data.get("next_departure")
+        if not dep:
+            return "Unknown"
+        if dep.get("is_cancelled") or dep.get("stop_is_cancelled"):
+            return "Cancelled"
+        delay = dep.get("delay_minutes") or 0
+        if delay > 0:
+            return "Delayed"
+        return "On time"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        dep = self.coordinator.data.get("next_departure") or {}
+        return {
+            "delay_minutes": dep.get("delay_minutes"),
+            "departure_status": dep.get("departure_status"),
+            "raw_status": dep.get("status"),
+            "is_cancelled": dep.get("is_cancelled", False),
+            "stop_is_cancelled": dep.get("stop_is_cancelled", False),
+            "trip_number": dep.get("trip_number"),
             "updated_at": self.coordinator.data.get("updated_at"),
         }
 

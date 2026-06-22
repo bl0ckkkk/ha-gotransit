@@ -42,6 +42,8 @@ SENSOR_VEHICLE_POSITION = "vehicle_position"
 SENSOR_DELAY = "delay"
 SENSOR_CONSIST = "consist"
 SENSOR_GUARANTEE = "guarantee"
+SENSOR_PLATFORM = "platform"
+SENSOR_STATUS = "status"
 BINARY_CATCHABLE = "catchable"
 TRACKER_TRAIN = "train"
 
