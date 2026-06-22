@@ -269,6 +269,37 @@ def parse_trains(raw: dict, line_code: str) -> list[dict]:
     return result
 
 
+def parse_journey(raw: dict) -> list[dict]:
+    """Parse Schedule/Journey into a flat list of upcoming trips.
+
+    The response nests each journey option under SchJourneys; every option has
+    one or more Services (more than one means a transfer), and each Service
+    holds its trains under Trips.Trip. We surface one row per journey option:
+    the first service's departure and the last service's arrival, so a journey
+    with a transfer still shows a single sensible departure/arrival pair.
+    Times come as 'YYYY-MM-DD HH:MM:SS'."""
+    out = []
+    for journey in _as_list(raw.get("SchJourneys")):
+        services = _as_list(journey.get("Services"))
+        if not services:
+            continue
+        first, last = services[0], services[-1]
+        trips = _as_list(first.get("Trips", {}).get("Trip"))
+        trip0 = trips[0] if trips else {}
+        out.append({
+            "trip_number": trip0.get("Number"),
+            "departure_time": _hhmm(first.get("StartTime")),
+            "arrival_time": _hhmm(last.get("EndTime")),
+            "departure_datetime": first.get("StartTime"),
+            "arrival_datetime": last.get("EndTime"),
+            "duration": journey.get("Duration") or first.get("Duration"),
+            "line": trip0.get("Line"),
+            "destination": str(trip0.get("Display", "")).strip() or None,
+            "transfers": max(len(services) - 1, 0),
+        })
+    return out
+
+
 def in_commute_window(start_str: str, end_str: str, now_time=None) -> bool:
     """True if now_time (defaults to current) is within the window.
     Handles overnight windows (start > end)."""

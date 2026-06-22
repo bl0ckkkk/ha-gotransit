@@ -58,6 +58,41 @@ NEXT_SERVICE_MIXED = {
     },
 }
 
+# Schedule/Journey — SchJourneys[].Services[].Trips.Trip[]
+JOURNEY_ALL = {
+    "Metadata": {"TimeStamp": "2026-06-21 07:00:00", "ErrorCode": "200", "ErrorMessage": "OK"},
+    "SchJourneys": [
+        {
+            "Date": "2026-06-21", "Time": "07:00", "To": "UN", "From": "BU", "Duration": "01:02:00",
+            "Services": [
+                {
+                    "Type": "T", "Direction": "E", "Code": "LW",
+                    "StartTime": "2026-06-21 07:12:00", "EndTime": "2026-06-21 08:14:00",
+                    "Duration": "01:02:00",
+                    "Trips": {"Trip": [
+                        {"Number": "1234", "Display": "LW - Union Station", "Line": "LW",
+                         "Direction": "E", "Type": "T"},
+                    ]},
+                },
+            ],
+        },
+        {
+            "Date": "2026-06-21", "Time": "07:42", "To": "UN", "From": "BU", "Duration": "01:00:00",
+            "Services": [
+                {
+                    "Type": "T", "Direction": "E", "Code": "LW",
+                    "StartTime": "2026-06-21 07:42:00", "EndTime": "2026-06-21 08:42:00",
+                    "Duration": "01:00:00",
+                    "Trips": {"Trip": {"Number": "1236", "Display": "LW - Union Station",
+                                       "Line": "LW", "Direction": "E", "Type": "T"}},
+                },
+            ],
+        },
+    ],
+}
+
+JOURNEY_EMPTY = {"Metadata": {"ErrorCode": "200"}, "SchJourneys": []}
+
 # Fleet/Consist/All
 CONSIST_ALL = {
     "AllConsists": {

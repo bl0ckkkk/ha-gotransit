@@ -225,6 +225,29 @@ def test_trains_no_filter():
 
 
 # ----------------------------------------------------------------------------
+# parse_journey
+# ----------------------------------------------------------------------------
+
+def test_journey_basic():
+    result = parsers.parse_journey(fx.JOURNEY_ALL)
+    assert len(result) == 2
+    assert result[0]["trip_number"] == "1234"
+    assert result[0]["departure_time"] == "07:12"
+    assert result[0]["arrival_time"] == "08:14"
+    assert result[0]["line"] == "LW"
+    assert result[0]["transfers"] == 0
+
+def test_journey_single_trip_dict():
+    # Trips.Trip can be a dict rather than a list
+    result = parsers.parse_journey(fx.JOURNEY_ALL)
+    assert result[1]["trip_number"] == "1236"
+    assert result[1]["departure_time"] == "07:42"
+
+def test_journey_empty():
+    assert parsers.parse_journey(fx.JOURNEY_EMPTY) == []
+
+
+# ----------------------------------------------------------------------------
 # in_commute_window
 # ----------------------------------------------------------------------------
 

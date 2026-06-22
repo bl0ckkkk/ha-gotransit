@@ -183,9 +183,12 @@ departures:
   - trip_number: "1234"
     departure_time: "07:12"
     arrival_time: "08:14"
-    duration: "62 min"
-    line: "Lakeshore West"
-    status: "Scheduled"
+    departure_datetime: "2026-06-20 07:12:00"
+    arrival_datetime: "2026-06-20 08:14:00"
+    duration: "01:02:00"
+    line: "LW"
+    destination: "LW - Union Station"
+    transfers: 0          # >0 when the journey requires a connection
   - trip_number: "1236"
     departure_time: "07:42"
     ...
