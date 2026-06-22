@@ -2,14 +2,16 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Any
 
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
 from .const import (
     DOMAIN,
@@ -59,6 +61,8 @@ def _device(entry: ConfigEntry, line_name: str) -> DeviceInfo:
 
 
 class GoTransitNextDepartureSensor(CoordinatorEntity[DepartureCoordinator], SensorEntity):
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+
     def __init__(self, coordinator: DepartureCoordinator, entry: ConfigEntry):
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_{SENSOR_NEXT_DEPARTURE}"
@@ -67,11 +71,30 @@ class GoTransitNextDepartureSensor(CoordinatorEntity[DepartureCoordinator], Sens
         self._attr_device_info = _device(entry, coordinator.line_name)
 
     @property
-    def native_value(self) -> str | None:
+    def native_value(self) -> datetime | None:
+        """The next departure as a tz-aware datetime so HA renders it as a
+        clock time plus a relative 'in X minutes' countdown."""
         dep = self.coordinator.data.get("next_departure")
         if not dep:
             return None
-        return dep.get("computed_time") or dep.get("scheduled_time")
+        # Prefer the full API datetimes ('YYYY-MM-DD HH:MM:SS', naive local).
+        raw = dep.get("computed_datetime") or dep.get("scheduled_datetime")
+        parsed = dt_util.parse_datetime(raw) if raw else None
+        if parsed is None:
+            # Fall back to a bare 'HH:MM', anchored to today's local date.
+            hhmm = dep.get("computed_time") or dep.get("scheduled_time")
+            if not hhmm:
+                return None
+            try:
+                t = datetime.strptime(hhmm, "%H:%M").time()
+            except ValueError:
+                return None
+            parsed = dt_util.now().replace(
+                hour=t.hour, minute=t.minute, second=0, microsecond=0, tzinfo=None
+            )
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=dt_util.DEFAULT_TIME_ZONE)
+        return parsed
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
