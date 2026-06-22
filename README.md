@@ -219,17 +219,21 @@ updated_at: "2026-06-20T07:00:12.004"
 in_commute_window: true
 poll_interval_seconds: 30
 trains:
-  - trip_number: "1234"
-    direction: "Inbound"
+  - trip_number: "1636"
+    direction: "E"            # VariantDir: E/W/N/S
+    destination: "LW - Union Station"
     latitude: 43.3841
     longitude: -79.8053
-    next_stop: "OA"
-    status: "On Time"
-    delay_minutes: 0
+    next_stop: "WATE"
+    at_station: "AL"          # null when between stops
+    in_motion: true
+    cars: "12"
+    status: "In motion"       # "In motion" / "Stopped"
+    delay_minutes: 4          # derived from DelaySeconds
 updated_at: "2026-06-20T07:09:01.883"
 ```
 
-> **Note:** Latitude/longitude availability depends on what Metrolinx populates in their API. Fields may be `null` for some trips.
+> **Note:** Coordinates use `-1.0` as a "no GPS" sentinel in the API; those are normalised to `null`.
 
 ---
 

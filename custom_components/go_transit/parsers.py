@@ -236,24 +236,37 @@ def parse_alerts(raw: dict, line_code: str) -> list[dict]:
 
 
 def parse_trains(raw: dict, line_code: str) -> list[dict]:
-    """Parse ServiceataGlance/Trains/All filtered to a line."""
-    trains = _as_list(raw.get("ServiceataGlance", {}).get("Trains", {}).get("Train"))
+    """Parse ServiceataGlance/Trains/All filtered to a line.
+
+    The feed nests live trips under Trips.Trip. Each trip carries its delay
+    as DelaySeconds, motion as IsInMotion, destination as Display, and uses
+    -1.0 as the 'no GPS' sentinel for coordinates."""
+    trips = _as_list(raw.get("Trips", {}).get("Trip"))
     line_trains = [
-        t for t in trains
-        if not line_code or str(t.get("LineCode", "")).upper() == line_code.upper()
+        t for t in trips
+        if not line_code or str(t.get("LineCode", "")).strip().upper() == line_code.strip().upper()
     ]
-    return [
-        {
+    result = []
+    for t in line_trains:
+        delay_sec = t.get("DelaySeconds")
+        try:
+            delay_min = round(int(delay_sec) / 60) if delay_sec is not None else None
+        except (ValueError, TypeError):
+            delay_min = None
+        result.append({
             "trip_number": t.get("TripNumber"),
-            "direction": t.get("Direction"),
-            "latitude": t.get("Latitude"),
-            "longitude": t.get("Longitude"),
+            "direction": t.get("VariantDir"),
+            "destination": str(t.get("Display", "")).strip() or None,
+            "latitude": _valid_coord(t.get("Latitude")),
+            "longitude": _valid_coord(t.get("Longitude")),
             "next_stop": t.get("NextStopCode"),
-            "status": t.get("Status"),
-            "delay_minutes": parse_delay(t),
-        }
-        for t in line_trains
-    ]
+            "at_station": t.get("AtStationCode") or None,
+            "in_motion": bool(t.get("IsInMotion")),
+            "cars": t.get("Cars"),
+            "status": "In motion" if t.get("IsInMotion") else "Stopped",
+            "delay_minutes": delay_min,
+        })
+    return result
 
 
 def in_commute_window(start_str: str, end_str: str, now_time=None) -> bool:

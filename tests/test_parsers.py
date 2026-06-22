@@ -214,6 +214,10 @@ def test_trains_line_filter():
     result = parsers.parse_trains(fx.TRAINS_ALL, "LW")
     assert len(result) == 1
     assert result[0]["trip_number"] == "1234"
+    assert result[0]["delay_minutes"] == 1  # 66s -> 1 min
+    assert result[0]["direction"] == "E"
+    assert result[0]["destination"] == "LW - Union Station"
+    assert result[0]["in_motion"] is True
 
 def test_trains_no_filter():
     result = parsers.parse_trains(fx.TRAINS_ALL, "")
