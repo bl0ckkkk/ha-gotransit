@@ -225,6 +225,31 @@ def test_trains_no_filter():
 
 
 # ----------------------------------------------------------------------------
+# null sub-objects (e.g. 403 returns "AllConsists": null) must not raise
+# ----------------------------------------------------------------------------
+
+def test_consist_null_subobject():
+    assert parsers.parse_consist({"AllConsists": None}, "1038")["coach_count"] is None
+
+def test_guarantee_null_subobject():
+    assert parsers.parse_guarantee({"Stops": None}, "BU")["guarantee_active"] is False
+
+def test_trains_null_subobject():
+    assert parsers.parse_trains({"Trips": None}, "LW") == []
+
+def test_next_service_null_subobject():
+    assert parsers.parse_next_service({"NextService": None}, "LW") is None
+
+def test_alerts_null_subobject():
+    assert parsers.parse_alerts({"ServiceAlerts": None}, "LW") == []
+
+def test_journey_null_service_trips():
+    raw = {"SchJourneys": [{"Services": [{"StartTime": "2026-06-21 07:12:00",
+                                          "EndTime": "2026-06-21 08:14:00", "Trips": None}]}]}
+    assert parsers.parse_journey(raw) == []
+
+
+# ----------------------------------------------------------------------------
 # parse_journey
 # ----------------------------------------------------------------------------
 

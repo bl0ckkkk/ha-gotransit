@@ -218,12 +218,28 @@ class GoTransitConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     },
                 )
 
+        # Searchable dropdown. A raw vol.In() with ~70 stops renders as a huge
+        # native picker that can crash the HA mobile app; SelectSelector gives a
+        # proper searchable list instead.
+        stop_selector = selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=stop_names,
+                mode=selector.SelectSelectorMode.DROPDOWN,
+                custom_value=False,
+            )
+        )
         schema_dict: dict = {
-            vol.Required(CONF_FROM_STOP): vol.In(stop_names),
-            vol.Required(CONF_TO_STOP): vol.In(stop_names),
+            vol.Required(CONF_FROM_STOP): stop_selector,
+            vol.Required(CONF_TO_STOP): stop_selector,
         }
         if line_names:
-            schema_dict[vol.Optional(CONF_LINE_CODE)] = vol.In(line_names)
+            schema_dict[vol.Optional(CONF_LINE_CODE)] = selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=line_names,
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                    custom_value=False,
+                )
+            )
         schema_dict.update({
             vol.Optional(CONF_MAX_DEPARTURES, default=5): vol.All(int, vol.Range(min=1, max=10)),
             vol.Optional(CONF_COMMUTE_START, default=DEFAULT_COMMUTE_START): selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.TIME)),
