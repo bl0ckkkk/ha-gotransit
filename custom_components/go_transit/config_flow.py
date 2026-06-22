@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
 from typing import Any
 
 import aiohttp
@@ -18,6 +17,7 @@ from homeassistant import config_entries
 from homeassistant.helpers import selector
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
+from homeassistant.util import dt as dt_util
 
 from .const import (
     BASE_URL,
@@ -110,7 +110,7 @@ async def _fetch_stops(api_key: str) -> dict[str, str]:
 
 
 async def _fetch_lines(api_key: str) -> dict[str, str]:
-    today = datetime.now().strftime("%Y%m%d")
+    today = dt_util.now().strftime("%Y%m%d")
     data = await _api_get(api_key, f"Schedule/Line/All/{today}")
     lines = data.get("AllLines", {}).get("Line", [])
     if isinstance(lines, dict):

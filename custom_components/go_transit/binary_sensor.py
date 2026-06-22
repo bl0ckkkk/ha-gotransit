@@ -10,6 +10,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
 from . import parsers
 from .const import (
@@ -77,7 +78,7 @@ class GoTransitCatchableSensor(CoordinatorEntity[DepartureCoordinator], BinarySe
             dep.get("computed_datetime") or dep.get("scheduled_datetime")
             or dep.get("computed_time") or dep.get("scheduled_time")
         )
-        mins = parsers.minutes_until(departure_time)
+        mins = parsers.minutes_until(departure_time, dt_util.now())
         travel = self._travel_minutes()
         return parsers.is_catchable(mins, travel, dep.get("is_cancelled", False))
 
@@ -88,7 +89,7 @@ class GoTransitCatchableSensor(CoordinatorEntity[DepartureCoordinator], BinarySe
             dep.get("computed_datetime") or dep.get("scheduled_datetime")
             or dep.get("computed_time") or dep.get("scheduled_time")
         )
-        mins = parsers.minutes_until(departure_time)
+        mins = parsers.minutes_until(departure_time, dt_util.now())
         travel = self._travel_minutes()
         return {
             "minutes_to_departure": mins,

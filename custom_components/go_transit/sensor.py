@@ -2,14 +2,16 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Any
 
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
 from .const import (
     DOMAIN,
@@ -19,6 +21,8 @@ from .const import (
     SENSOR_DEPARTURES,
     SENSOR_GUARANTEE,
     SENSOR_NEXT_DEPARTURE,
+    SENSOR_PLATFORM,
+    SENSOR_STATUS,
     SENSOR_VEHICLE_POSITION,
 )
 from .coordinator import (
@@ -40,6 +44,8 @@ async def async_setup_entry(
     coords = hass.data[DOMAIN][entry.entry_id]
     async_add_entities([
         GoTransitNextDepartureSensor(coords["departures"], entry),
+        GoTransitPlatformSensor(coords["departures"], entry),
+        GoTransitStatusSensor(coords["departures"], entry),
         GoTransitDelaySensor(coords["departures"], entry),
         GoTransitDeparturesSensor(coords["departures"], entry),
         GoTransitVehiclePositionSensor(coords["vehicles"], entry),
@@ -59,6 +65,8 @@ def _device(entry: ConfigEntry, line_name: str) -> DeviceInfo:
 
 
 class GoTransitNextDepartureSensor(CoordinatorEntity[DepartureCoordinator], SensorEntity):
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+
     def __init__(self, coordinator: DepartureCoordinator, entry: ConfigEntry):
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_{SENSOR_NEXT_DEPARTURE}"
@@ -67,11 +75,30 @@ class GoTransitNextDepartureSensor(CoordinatorEntity[DepartureCoordinator], Sens
         self._attr_device_info = _device(entry, coordinator.line_name)
 
     @property
-    def native_value(self) -> str | None:
+    def native_value(self) -> datetime | None:
+        """The next departure as a tz-aware datetime so HA renders it as a
+        clock time plus a relative 'in X minutes' countdown."""
         dep = self.coordinator.data.get("next_departure")
         if not dep:
             return None
-        return dep.get("computed_time") or dep.get("scheduled_time")
+        # Prefer the full API datetimes ('YYYY-MM-DD HH:MM:SS', naive local).
+        raw = dep.get("computed_datetime") or dep.get("scheduled_datetime")
+        parsed = dt_util.parse_datetime(raw) if raw else None
+        if parsed is None:
+            # Fall back to a bare 'HH:MM', anchored to today's local date.
+            hhmm = dep.get("computed_time") or dep.get("scheduled_time")
+            if not hhmm:
+                return None
+            try:
+                t = datetime.strptime(hhmm, "%H:%M").time()
+            except ValueError:
+                return None
+            parsed = dt_util.now().replace(
+                hour=t.hour, minute=t.minute, second=0, microsecond=0, tzinfo=None
+            )
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=dt_util.DEFAULT_TIME_ZONE)
+        return parsed
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -95,6 +122,79 @@ class GoTransitNextDepartureSensor(CoordinatorEntity[DepartureCoordinator], Sens
             "latitude": dep.get("latitude"),
             "longitude": dep.get("longitude"),
             "update_time": dep.get("update_time"),
+            "updated_at": self.coordinator.data.get("updated_at"),
+        }
+
+
+class GoTransitPlatformSensor(CoordinatorEntity[DepartureCoordinator], SensorEntity):
+    """Boarding platform for the next departure.
+
+    Reports the actual platform once GO posts it, falling back to the
+    scheduled platform. `track_confirmed` is True when the actual platform
+    is known — useful for a 'platform now posted' automation."""
+
+    def __init__(self, coordinator: DepartureCoordinator, entry: ConfigEntry):
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_{SENSOR_PLATFORM}"
+        self._attr_name = f"{entry.title} — Platform"
+        self._attr_icon = "mdi:bus-stop"
+        self._attr_device_info = _device(entry, coordinator.line_name)
+
+    @property
+    def native_value(self) -> str | None:
+        dep = self.coordinator.data.get("next_departure") or {}
+        return dep.get("actual_platform") or dep.get("scheduled_platform")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        dep = self.coordinator.data.get("next_departure") or {}
+        return {
+            "scheduled_platform": dep.get("scheduled_platform"),
+            "actual_platform": dep.get("actual_platform"),
+            "track_confirmed": bool(dep.get("actual_platform")),
+            "trip_number": dep.get("trip_number"),
+            "updated_at": self.coordinator.data.get("updated_at"),
+        }
+
+
+class GoTransitStatusSensor(CoordinatorEntity[DepartureCoordinator], SensorEntity):
+    """Human-readable status of the next departure.
+
+    Derived from cancellation + delay rather than the API's cryptic status
+    codes, which are kept as attributes."""
+
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = ["Cancelled", "Delayed", "On time", "Unknown"]
+
+    def __init__(self, coordinator: DepartureCoordinator, entry: ConfigEntry):
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_{SENSOR_STATUS}"
+        self._attr_name = f"{entry.title} — Status"
+        self._attr_icon = "mdi:information-outline"
+        self._attr_device_info = _device(entry, coordinator.line_name)
+
+    @property
+    def native_value(self) -> str:
+        dep = self.coordinator.data.get("next_departure")
+        if not dep:
+            return "Unknown"
+        if dep.get("is_cancelled") or dep.get("stop_is_cancelled"):
+            return "Cancelled"
+        delay = dep.get("delay_minutes") or 0
+        if delay > 0:
+            return "Delayed"
+        return "On time"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        dep = self.coordinator.data.get("next_departure") or {}
+        return {
+            "delay_minutes": dep.get("delay_minutes"),
+            "departure_status": dep.get("departure_status"),
+            "raw_status": dep.get("status"),
+            "is_cancelled": dep.get("is_cancelled", False),
+            "stop_is_cancelled": dep.get("stop_is_cancelled", False),
+            "trip_number": dep.get("trip_number"),
             "updated_at": self.coordinator.data.get("updated_at"),
         }
 
