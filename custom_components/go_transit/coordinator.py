@@ -167,16 +167,23 @@ class DepartureCoordinator(_GoTransitBase):
         except Exception as err:  # noqa: BLE001
             _LOGGER.warning("Next service unexpected error: %s", err)
 
-        # Journey schedule
+        # Journey schedule.
+        # The Journey endpoint is a trip planner: its trailing count limits
+        # *itineraries* (a direct train plus transfer permutations), which
+        # parse_journey then dedupes down to distinct departures. Asking for
+        # exactly max_departures therefore yields far fewer rows (e.g. 5
+        # itineraries collapse to ~2 departures). Over-fetch so enough distinct
+        # departures survive the dedupe, then cap to max_departures.
         try:
             date_str = now.strftime("%Y%m%d")
             time_str = now.strftime("%H%M")  # API wants HHMM, not HH:MM (a colon -> HTTP 400)
+            fetch_n = min(max(self.max_departures * 6, 24), 40)
             raw = await self._get(
                 f"Schedule/Journey/{date_str}/{self.from_stop_code}"
-                f"/{self.to_stop_code}/{time_str}/{self.max_departures}"
+                f"/{self.to_stop_code}/{time_str}/{fetch_n}"
             )
             self.last_raw["journey"] = raw
-            result["departures"] = parsers.parse_journey(raw)
+            result["departures"] = parsers.parse_journey(raw)[: self.max_departures]
         except UpdateFailed as err:
             _LOGGER.warning("Journey fetch failed: %s", err)
         except Exception as err:  # noqa: BLE001
