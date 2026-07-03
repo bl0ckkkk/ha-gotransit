@@ -48,7 +48,9 @@ def _build_coordinators(hass: HomeAssistant, entry: ConfigEntry) -> dict:
         to_stop_name=entry.data[CONF_TO_STOP],
         line_code=entry.data.get(CONF_LINE_CODE, ""),
         line_name=entry.data.get(CONF_LINE_NAME, ""),
-        max_departures=entry.data.get(CONF_MAX_DEPARTURES, 5),
+        max_departures=entry.options.get(
+            CONF_MAX_DEPARTURES, entry.data.get(CONF_MAX_DEPARTURES, 5)
+        ),
         commute_start=entry.options.get(
             CONF_COMMUTE_START,
             entry.data.get(CONF_COMMUTE_START, DEFAULT_COMMUTE_START),
