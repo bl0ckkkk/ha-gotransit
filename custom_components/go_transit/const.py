@@ -19,7 +19,7 @@ CONF_SERVICE_END = "service_end"
 BASE_URL = "https://api.openmetrolinx.com/OpenDataAPI/api/V1"
 
 # Platforms this integration sets up
-PLATFORMS = ["sensor", "binary_sensor", "device_tracker"]
+PLATFORMS = ["sensor", "binary_sensor", "device_tracker", "select"]
 
 # Poll intervals (seconds)
 INTERVAL_DEPARTURES = 120        # next departure + schedule

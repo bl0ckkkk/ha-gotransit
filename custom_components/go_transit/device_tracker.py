@@ -1,6 +1,6 @@
 """Device tracker platform for GO Transit — live train position on the map.
 
-Tracks the train serving the next departure (matched by trip number) so it
+Tracks the pinned train, or the next departure when unpinned, so it
 appears on Home Assistant's native map. Position comes from the vehicle feed."""
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, TRACKER_TRAIN
 from .coordinator import DepartureCoordinator, VehicleCoordinator
+from .pinning import match_train
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -27,12 +28,12 @@ async def async_setup_entry(
 ) -> None:
     coords = hass.data[DOMAIN][entry.entry_id]
     async_add_entities([
-        GoTransitTrainTracker(coords["vehicles"], coords["departures"], entry)
+        GoTransitTrainTracker(coords["vehicles"], coords["departures"], entry, coords["pinned"])
     ])
 
 
 class GoTransitTrainTracker(CoordinatorEntity[VehicleCoordinator], TrackerEntity):
-    """Map marker for the train serving your next departure.
+    """Map marker for the pinned train or next departure.
 
     Listens to the vehicle coordinator for position, and the departure
     coordinator for which trip number to follow."""
@@ -42,10 +43,12 @@ class GoTransitTrainTracker(CoordinatorEntity[VehicleCoordinator], TrackerEntity
         vehicle_coordinator: VehicleCoordinator,
         departure_coordinator: DepartureCoordinator,
         entry: ConfigEntry,
+        pinned_coordinator,
     ):
         super().__init__(vehicle_coordinator)
         self._dep = departure_coordinator
         self._entry = entry
+        self._pinned = pinned_coordinator
         self._attr_has_entity_name = True
         self._attr_unique_id = f"{entry.entry_id}_{TRACKER_TRAIN}"
         self._attr_name = "Train"
@@ -58,14 +61,10 @@ class GoTransitTrainTracker(CoordinatorEntity[VehicleCoordinator], TrackerEntity
         )
 
     def _matched_train(self) -> dict | None:
-        """Find the vehicle whose trip number matches the next departure."""
-        trip_number = ((self._dep.data or {}).get("next_departure") or {}).get("trip_number")
-        if not trip_number:
-            return None
-        for train in (self.coordinator.data or {}).get("vehicle_positions", []):
-            if str(train.get("trip_number", "")).strip() == str(trip_number).strip():
-                return train
-        return None
+        """Match the selected trip without falling back while pinned."""
+        pin = self._pinned.pin
+        trip_number = (pin or (self._dep.data or {}).get("next_departure") or {}).get("trip_number")
+        return match_train((self.coordinator.data or {}).get("vehicle_positions", []), trip_number)
 
     @property
     def source_type(self) -> SourceType:
@@ -94,14 +93,15 @@ class GoTransitTrainTracker(CoordinatorEntity[VehicleCoordinator], TrackerEntity
     @property
     def available(self) -> bool:
         """Only available when we have a matched train with coordinates."""
-        train = self._matched_train()
-        return bool(train and train.get("latitude") is not None)
+        return bool(self.coordinator.last_update_success and self.latitude is not None
+                    and self.longitude is not None)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         train = self._matched_train() or {}
         return {
-            "trip_number": train.get("trip_number"),
+            "trip_number": (self._pinned.pin or train).get("trip_number"),
+            "pinned": self._pinned.pin is not None,
             "direction": train.get("direction"),
             "next_stop": train.get("next_stop"),
             "status": train.get("status"),
@@ -118,4 +118,7 @@ class GoTransitTrainTracker(CoordinatorEntity[VehicleCoordinator], TrackerEntity
         await super().async_added_to_hass()
         self.async_on_remove(
             self._dep.async_add_listener(self._handle_coordinator_update)
+        )
+        self.async_on_remove(
+            self._pinned.async_add_listener(self._handle_coordinator_update)
         )
