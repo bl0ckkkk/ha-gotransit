@@ -334,6 +334,70 @@ data:
 To pin a train, use an exact option from the select entity's `options` attribute,
 or choose it directly in the Home Assistant UI.
 
+### Watch My Commute and Get-Off Alert
+
+Choose a dated departure in **Pinned Train**. The route device's **Commute Alerts**
+event entity makes these changes available to Home Assistant automations:
+
+| Event type | When it fires |
+| --- | --- |
+| `departure_cancelled` | The current feed explicitly cancels the selected train or its boarding stop. |
+| `platform_changed` | The confirmed platform changes from a previously known platform. |
+| `departure_delayed` | The selected departure first reports a delay of five minutes or more. |
+| `destination_next` | A recent live update shows your configured destination as the next stop on a confirmed direct trip, after the boarding time. |
+
+Departure alerts can include a same-route backup when there is a later direct train
+in the schedule. The `backup.scheduled` flag identifies timetable-only suggestions.
+The alerts use the existing polling cadence. For a timely get-off reminder, include
+the whole ride in the configured commute window (30-second polling within the
+window, five minutes outside it).
+
+The live vehicle feed does not expose a verified dated run ID. Matching is limited
+to a time window around the selected departure, uses the line and available
+direction, and skips ambiguous matches. A missing train, missing or stale vehicle
+timestamp, or an itinerary without confirmed direct service cannot trigger a
+get-off reminder. The pin tracks alert history across restarts and reloads.
+
+To send both kinds of alerts to your phone, add this automation. Replace
+`event.go_union_burlington_commute_alerts` and `notify.mobile_app_your_iphone`
+with the entity and notification action shown in your Home Assistant instance.
+
+```yaml
+alias: GO Transit commute alerts
+triggers:
+  - trigger: state
+    entity_id: event.go_union_burlington_commute_alerts
+    to: null
+conditions:
+  - condition: template
+    value_template: >-
+      {{ trigger.from_state is not none
+         and trigger.from_state.state != 'unavailable'
+         and 0 <= as_timestamp(now()) - as_timestamp(trigger.to_state.state, 0) < 60 }}
+actions:
+  - action: notify.mobile_app_your_iphone
+    data:
+      title: GO Transit
+      message: >-
+        {% set alert = trigger.to_state.attributes %}
+        {% if alert.event_type == 'destination_next' %}
+          {{ alert.destination }} is next.
+        {% else %}
+          {% if alert.event_type == 'departure_cancelled' %}
+            Your train to {{ alert.destination }} is cancelled from {{ alert.origin }}.
+          {% elif alert.event_type == 'platform_changed' %}
+            Your train to {{ alert.destination }} moved from platform
+            {{ alert.previous_platform }} to {{ alert.platform }}.
+          {% elif alert.event_type == 'departure_delayed' %}
+            Your train to {{ alert.destination }} is {{ alert.delay_minutes }} minutes late.
+          {% endif %}
+          {% if alert.backup %}
+            Next alternative: {{ alert.backup.time }}{% if alert.backup.scheduled %} (scheduled){% endif %}.
+          {% endif %}
+        {% endif %}
+mode: queued
+```
+
 ### Notify if your train is delayed at departure time
 ```yaml
 automation:

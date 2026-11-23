@@ -3,16 +3,16 @@ import asyncio
 import importlib.util
 import sys
 import types
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).parents[1] / "custom_components" / "go_transit"
 sys.path.insert(0, str(ROOT))
-from pinning import UNPINNED, active_pin, departure_options, make_pin, match_train
+from pinning import GO_TIMEZONE, UNPINNED, active_pin, departure_options, make_pin, match_train
 
-NOW = datetime(2026, 10, 11, 23, 55, tzinfo=timezone.utc)
+NOW = datetime(2026, 10, 11, 23, 55, tzinfo=GO_TIMEZONE)
 DEPARTURE = {"trip_number": "1234", "departure_datetime": "2026-10-11 23:58:00"}
 
 
@@ -48,7 +48,15 @@ def runtime(monkeypatch):
         return mod
 
     class Coordinator:
+        line_code = "LW"
+        line_name = "Lakeshore West"
+        from_stop_code = "UN"
+        from_stop_name = "Union"
+        to_stop_code = "BU"
+        to_stop_name = "Burlington"
+
         def __init__(self, *args, **kwargs):
+            self.hass = args[0] if args else None
             self.data = None
             self.last_update_success = True
             self.listeners = []
@@ -86,6 +94,19 @@ def runtime(monkeypatch):
     class Sensor:
         pass
 
+    class Event:
+        async def async_added_to_hass(self):
+            self.events = []
+
+        def async_on_remove(self, remove):
+            self.remove = remove
+
+        def _trigger_event(self, event, attributes):
+            self.events.append((event, attributes))
+
+        def async_write_ha_state(self):
+            pass
+
     for name in ["homeassistant", "homeassistant.components", "homeassistant.helpers", "homeassistant.util"]:
         module(name)
     module("homeassistant.core", HomeAssistant=object, callback=lambda f: f)
@@ -97,6 +118,7 @@ def runtime(monkeypatch):
     module("homeassistant.helpers.update_coordinator", DataUpdateCoordinator=Coordinator, CoordinatorEntity=Entity)
     module("homeassistant.components.device_tracker", SourceType=types.SimpleNamespace(GPS="gps"), TrackerEntity=Tracker)
     module("homeassistant.components.select", SelectEntity=Select)
+    module("homeassistant.components.event", EventEntity=Event)
     module("homeassistant.components.sensor", SensorEntity=Sensor,
            SensorDeviceClass=types.SimpleNamespace(TIMESTAMP="timestamp", ENUM="enum"))
     dt = module("homeassistant.util.dt", now=lambda: NOW)
@@ -116,16 +138,20 @@ def runtime(monkeypatch):
     tracker = load("device_tracker")
     select = load("select")
     sensor = load("sensor")
-    return types.SimpleNamespace(Coordinator=Coordinator, Pin=pinned.PinnedTrainCoordinator,
-                                 Tracker=tracker.GoTransitTrainTracker,
-                                 Select=select.GoTransitPinnedTrainSelect, Sensor=sensor.GoTransitPinnedTrainStatusSensor)
+    event = load("event")
+    return types.SimpleNamespace(
+        Coordinator=Coordinator, Pin=pinned.PinnedTrainCoordinator,
+        Tracker=tracker.GoTransitTrainTracker, Select=select.GoTransitPinnedTrainSelect,
+        Sensor=sensor.GoTransitPinnedTrainStatusSensor, Event=event.GoTransitCommuteEvent, clock=dt,
+    )
 
 
 def test_pin_restore_clear_and_tracker_does_not_jump(runtime):
     async def scenario():
         dep, veh = runtime.Coordinator(), runtime.Coordinator()
         dep.data = {"next_departure": DEPARTURE, "departures": [DEPARTURE]}
-        veh.data = {"vehicle_positions": [{"trip_number": "1234", "latitude": 43, "longitude": -79},
+        veh.data = {"updated_at": NOW.isoformat(),
+                    "vehicle_positions": [{"trip_number": "1234", "latitude": 43, "longitude": -79},
                                           {"trip_number": "1236", "latitude": 44, "longitude": -80}]}
         veh.line_name = "Lakeshore West"
         entry = types.SimpleNamespace(entry_id="route1", title="Home to Union")
@@ -164,7 +190,7 @@ def test_status_needs_live_evidence_for_arrival(runtime):
         dep, veh = runtime.Coordinator(), runtime.Coordinator()
         dep.data = {"departures": [DEPARTURE]}
         dep.line_name, dep.to_stop_code = "LW", "UN"
-        veh.data = {"vehicle_positions": []}
+        veh.data = {"updated_at": NOW.isoformat(), "vehicle_positions": []}
         entry = types.SimpleNamespace(entry_id="arrival", title="Home to Union")
         pin = runtime.Pin(None, entry, dep, veh)
         await pin.async_load()
@@ -180,4 +206,80 @@ def test_status_needs_live_evidence_for_arrival(runtime):
         veh.data["vehicle_positions"][0]["at_station"] = "BU"
         assert status.native_value == "Stopped"
         assert status.extra_state_attributes["trip_number"] == "1234"
+    asyncio.run(scenario())
+
+
+def test_commute_alerts_follow_the_dated_pin_and_survive_reload(runtime):
+    async def scenario():
+        now = NOW
+        runtime.clock.now = lambda: now
+        hass = types.SimpleNamespace(async_create_task=asyncio.create_task)
+        dep, veh = runtime.Coordinator(), runtime.Coordinator()
+        entry = types.SimpleNamespace(entry_id="commute", title="Union to Burlington")
+        departure = {**DEPARTURE, "transfers": 0, "actual_platform": "2", "direction": "W"}
+        backup = {"trip_number": "5678", "departure_datetime": "2026-10-12 00:30", "transfers": 0}
+        dep.data = {"next_departure": departure, "departures": [departure, backup], "updated_at": now.isoformat()}
+        pin = runtime.Pin(hass, entry, dep, veh)
+        await pin.async_load()
+        event = runtime.Event(pin, entry)
+        await event.async_added_to_hass()
+        await pin.async_select(next(iter(pin.choices)))
+        await pin.async_finish_pending_alerts()
+
+        # The board advances. A separate live row still identifies our departure.
+        dep.data.update(
+            next_departure=backup,
+            live_departures=[
+                {**departure, "actual_platform": "3", "delay_minutes": 5,
+                 "computed_datetime": "2026-10-12 00:03"},
+                {**backup, "delay_minutes": 45, "actual_platform": "9"},
+            ],
+            departures=[backup],
+        )
+        pin.async_feed_updated()
+        await pin.async_finish_pending_alerts()
+        assert [kind for kind, _ in event.events] == ["platform_changed", "departure_delayed"]
+        assert event.events[0][1]["platform"] == "3"
+        assert event.events[1][1]["delay_minutes"] == 5
+        assert event.events[1][1]["backup"] == {"trip_number": "5678", "time": "00:30", "scheduled": True}
+
+        now += timedelta(minutes=10)
+        # A stale or failed feed and a duplicate live match must not trigger.
+        train = {"trip_number": "1234", "line_code": "LW", "direction": "W", "next_stop": " BU "}
+        vehicle_snapshot = {"vehicle_positions": [train], "feed_timestamp": NOW.isoformat()}
+        veh.data = vehicle_snapshot
+        pin.async_feed_updated()
+        await pin.async_finish_pending_alerts()
+        assert len(event.events) == 2
+
+        veh.data["feed_timestamp"] = now.isoformat()
+        veh.last_update_success = False
+        pin.async_feed_updated()
+        await pin.async_finish_pending_alerts()
+        assert len(event.events) == 2
+
+        veh.last_update_success = True
+        veh.data["vehicle_positions"] = [train, {**train, "direction": "E"}]
+        pin.async_feed_updated()
+        await pin.async_finish_pending_alerts()
+        assert len(event.events) == 2
+
+        # A return to live data for the correct run produces exactly one alert.
+        veh.data["vehicle_positions"] = [train]
+        pin.async_feed_updated()
+        await pin.async_finish_pending_alerts()
+        assert event.events[-1][0] == "destination_next"
+        assert event.events[-1][1]["destination"] == "Burlington"
+
+        event.remove()
+        restored = runtime.Pin(hass, entry, dep, veh)
+        await restored.async_load()
+        restored_event = runtime.Event(restored, entry)
+        await restored_event.async_added_to_hass()
+        restored.async_feed_updated()
+        await restored.async_finish_pending_alerts()
+        assert restored_event.events == []
+        assert restored.pin["trip_number"] == "1234"
+        assert "_commute" not in runtime.Select(restored, entry).extra_state_attributes
+
     asyncio.run(scenario())

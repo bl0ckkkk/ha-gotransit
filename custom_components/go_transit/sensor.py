@@ -92,8 +92,8 @@ class GoTransitPinnedTrainStatusSensor(CoordinatorEntity, SensorEntity):
             "next_stop": train.get("next_stop"),
             "at_station": train.get("at_station"),
             "cars": train.get("cars"),
-            "live_data_available": bool(train and self.coordinator.vehicles.last_update_success),
-            "updated_at": (self.coordinator.vehicles.data or {}).get("updated_at"),
+            "live_data_available": bool(train),
+            "updated_at": (self.coordinator.vehicles.data or {}).get("feed_timestamp"),
         }
 
 

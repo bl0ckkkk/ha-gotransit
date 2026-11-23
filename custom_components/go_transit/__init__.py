@@ -99,6 +99,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     pinned = PinnedTrainCoordinator(hass, entry, coordinators["departures"], coordinators["vehicles"])
     await pinned.async_load()
     coordinators["pinned"] = pinned
+    coordinators["departures"].watching_departure = pinned.is_watching_departure
     for key in ("departures", "vehicles"):
         entry.async_on_unload(coordinators[key].async_add_listener(pinned.async_feed_updated))
 
@@ -113,5 +114,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id)
+        coordinators = hass.data[DOMAIN].pop(entry.entry_id)
+        await coordinators["pinned"].async_finish_pending_alerts()
     return unload_ok

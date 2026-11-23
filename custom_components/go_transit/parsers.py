@@ -6,6 +6,7 @@ returns plain Python structures.
 """
 from __future__ import annotations
 
+from collections import Counter
 from datetime import datetime
 from typing import Any
 
@@ -81,20 +82,14 @@ def parse_next_service(raw: dict, line_code: str, destination: str = "") -> dict
     (TripOrder is per-direction and unreliable across mixed directions).
 
     Times come as 'YYYY-MM-DD HH:MM:SS'. Coordinates use -1.0 as 'no GPS'."""
-    lines = _as_list((raw.get("NextService") or {}).get("Lines"))
-
-    # Filter by line code (trailing whitespace tolerated)
-    candidates = [
-        ln for ln in lines
-        if not line_code or str(ln.get("LineCode", "")).strip().upper() == line_code.strip().upper()
-    ]
+    candidates = parse_next_service_rows(raw, line_code)
 
     # Filter by destination station name if provided (case-insensitive substring)
     if destination:
         dest_l = destination.strip().lower()
         matched = [
             ln for ln in candidates
-            if dest_l in str(ln.get("DirectionName", "")).lower()
+            if dest_l in str(ln.get("destination", "")).lower()
         ]
         # Only narrow if we actually found destination matches; otherwise keep all
         if matched:
@@ -105,11 +100,21 @@ def parse_next_service(raw: dict, line_code: str, destination: str = "") -> dict
 
     # Sort by actual departure clock time, earliest first
     def _dep_key(ln):
-        dt = _parse_api_time(ln.get("ComputedDepartureTime") or ln.get("ScheduledDepartureTime"))
+        dt = _parse_api_time(ln["computed_datetime"] or ln["scheduled_datetime"])
         return dt or datetime.max
-    candidates.sort(key=_dep_key)
+    return min(candidates, key=_dep_key)
 
-    ln = candidates[0]
+
+def parse_next_service_rows(raw: dict, line_code: str) -> list[dict]:
+    """Keep all live predictions on the line, including a watched departure."""
+    lines = _as_list((raw.get("NextService") or {}).get("Lines"))
+    return [
+        _next_service_row(line) for line in lines
+        if not line_code or line_code.strip().upper() == str(line.get("LineCode", "")).strip().upper()
+    ]
+
+
+def _next_service_row(ln: dict) -> dict:
     return {
         "trip_number": ln.get("TripNumber"),
         "destination": str(ln.get("DirectionName", "")).strip(),
@@ -191,6 +196,26 @@ def parse_exceptions(raw: dict, trip_number: str, from_stop_code: str) -> dict:
     return result
 
 
+def parse_boarding_cancellations(raw: dict, from_stop_code: str) -> list[dict]:
+    """Collect explicit trip and origin-stop cancellations from the current feed."""
+    cancellations = []
+    trips = [(str(trip.get("TripNumber") or "").strip(), trip) for trip in _as_list(raw.get("Trip"))]
+    counts = Counter(number for number, _ in trips)
+    for trip_number, trip in trips:
+        if not trip_number or counts[trip_number] != 1:
+            continue
+        stops = _as_list(trip.get("Stop"))
+        boarding_stop = next(
+            (stop for stop in stops if str(stop.get("Code", "")).upper() == from_stop_code.upper()),
+            None,
+        )
+        if str(trip.get("IsCancelled")).lower() == "true" or (
+            boarding_stop and str(boarding_stop.get("IsCancelled")).lower() == "true"
+        ):
+            cancellations.append({"trip_number": trip_number, "origin_in_feed": boarding_stop is not None})
+    return cancellations
+
+
 def parse_guarantee(raw: dict, from_stop_code: str) -> dict:
     """Parse ServiceGuarantee for whether a refund guarantee applies."""
     result = {"guarantee_active": False, "affected_stops": [], "reason": None}
@@ -255,6 +280,7 @@ def parse_trains(raw: dict, line_code: str) -> list[dict]:
             delay_min = None
         result.append({
             "trip_number": t.get("TripNumber"),
+            "line_code": t.get("LineCode"),
             "direction": t.get("VariantDir"),
             "destination": str(t.get("Display", "")).strip() or None,
             "latitude": _valid_coord(t.get("Latitude")),
@@ -300,6 +326,8 @@ def parse_journey(raw: dict) -> list[dict]:
                 "arrival_datetime": service.get("EndTime"),
                 "duration": service.get("Duration"),
                 "line": first_trip.get("Line"),
+                "direction": first_trip.get("Direction"),
+                "service_type": first_trip.get("Type"),
                 "destination": str(first_trip.get("Display", "")).strip() or None,
                 "transfers": transfers,
             }

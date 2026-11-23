@@ -62,8 +62,9 @@ class GoTransitTrainTracker(CoordinatorEntity[VehicleCoordinator], TrackerEntity
 
     def _matched_train(self) -> dict | None:
         """Match the selected trip without falling back while pinned."""
-        pin = self._pinned.pin
-        trip_number = (pin or (self._dep.data or {}).get("next_departure") or {}).get("trip_number")
+        if self._pinned.pin:
+            return self._pinned.train
+        trip_number = ((self._dep.data or {}).get("next_departure") or {}).get("trip_number")
         return match_train((self.coordinator.data or {}).get("vehicle_positions", []), trip_number)
 
     @property

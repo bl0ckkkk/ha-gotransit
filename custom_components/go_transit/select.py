@@ -32,7 +32,7 @@ class GoTransitPinnedTrainSelect(CoordinatorEntity, SelectEntity):
 
     @property
     def extra_state_attributes(self):
-        return dict(self.coordinator.pin or {})
+        return {key: value for key, value in (self.coordinator.pin or {}).items() if key != "_commute"}
 
     async def async_select_option(self, option):
         await self.coordinator.async_select(option)

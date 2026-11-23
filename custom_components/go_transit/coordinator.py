@@ -38,6 +38,7 @@ from .const import (
     INTERVAL_VEHICLES_ACTIVE,
     INTERVAL_VEHICLES_IDLE,
 )
+from .pinning import GO_TIMEZONE
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -140,6 +141,7 @@ class DepartureCoordinator(_GoTransitBase):
             timedelta(seconds=INTERVAL_DEPARTURES),
         )
         self.pause_outside_service = True
+        self.watching_departure = lambda: False
 
     async def _async_update_data(self) -> dict:
         now = dt_util.now()
@@ -162,6 +164,8 @@ class DepartureCoordinator(_GoTransitBase):
             raw = await self._get(f"Stop/NextService/{self.from_stop_code}")
             self.last_raw["next_service"] = raw
             result["next_departure"] = parsers.parse_next_service(raw, self.line_code, self.to_stop_name)
+            result["live_departures"] = parsers.parse_next_service_rows(raw, self.line_code)
+            result["live_departures_timestamp"] = (raw.get("Metadata") or {}).get("TimeStamp")
         except UpdateFailed as err:
             _LOGGER.warning("Next service fetch failed: %s", err)
         except Exception as err:  # noqa: BLE001
@@ -175,8 +179,9 @@ class DepartureCoordinator(_GoTransitBase):
         # itineraries collapse to ~2 departures). Over-fetch so enough distinct
         # departures survive the dedupe, then cap to max_departures.
         try:
-            date_str = now.strftime("%Y%m%d")
-            time_str = now.strftime("%H%M")  # API wants HHMM, not HH:MM (a colon -> HTTP 400)
+            agency_now = now.astimezone(GO_TIMEZONE)
+            date_str = agency_now.strftime("%Y%m%d")
+            time_str = agency_now.strftime("%H%M")  # API wants HHMM, not HH:MM (a colon -> HTTP 400)
             fetch_n = min(max(self.max_departures * 6, 24), 40)
             raw = await self._get(
                 f"Schedule/Journey/{date_str}/{self.from_stop_code}"
@@ -190,17 +195,16 @@ class DepartureCoordinator(_GoTransitBase):
             _LOGGER.warning("Journey unexpected error: %s", err)
 
         # Exceptions / cancellation
-        if result["next_departure"]:
-            trip_number = result["next_departure"].get("trip_number")
+        if result["next_departure"] or self.watching_departure():
             try:
                 raw = await self._get("ServiceUpdate/Exceptions/All")
                 self.last_raw["exceptions"] = raw
-                exc = parsers.parse_exceptions(raw, trip_number, self.from_stop_code)
-                if exc["matched"]:
-                    result["next_departure"]["is_cancelled"] = exc["is_cancelled"]
-                    result["next_departure"]["stop_is_cancelled"] = exc["stop_is_cancelled"]
-                    result["next_departure"]["stop_is_stopping"] = exc["stop_is_stopping"]
-                    result["next_departure"]["stop_actual_time"] = exc["stop_actual_time"]
+                result["boarding_cancellations"] = parsers.parse_boarding_cancellations(raw, self.from_stop_code)
+                result["exceptions_timestamp"] = (raw.get("Metadata") or {}).get("TimeStamp")
+                if next_departure := result["next_departure"]:
+                    exc = parsers.parse_exceptions(raw, next_departure.get("trip_number"), self.from_stop_code)
+                    if exc["matched"]:
+                        next_departure.update({key: value for key, value in exc.items() if key != "matched"})
             except UpdateFailed as err:
                 _LOGGER.warning("Exceptions fetch failed: %s", err)
             except Exception as err:  # noqa: BLE001
@@ -239,10 +243,9 @@ class VehicleCoordinator(_GoTransitBase):
             raw = await self._get("ServiceataGlance/Trains/All")
             self.last_raw["trains"] = raw
             result["vehicle_positions"] = parsers.parse_trains(raw, self.line_code)
-        except UpdateFailed as err:
-            _LOGGER.warning("Vehicle fetch failed: %s", err)
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("Vehicle unexpected error: %s", err)
+            result["feed_timestamp"] = (raw.get("Metadata") or {}).get("TimeStamp")
+        except (AttributeError, TypeError, ValueError) as err:
+            raise UpdateFailed("Invalid GO Transit vehicle response") from err
         return result
 
 
