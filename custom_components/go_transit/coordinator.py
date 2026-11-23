@@ -53,14 +53,14 @@ async def _api_get(
     try:
         async with session.get(url, params=p, timeout=aiohttp.ClientTimeout(total=15)) as resp:
             if resp.status != 200:
-                raise UpdateFailed(f"GO API HTTP {resp.status} for {path}")
-            text = await resp.text()
+                raise UpdateFailed(f"GO API HTTP {resp.status}")
             try:
-                return json.loads(text)
-            except (ValueError, TypeError) as err:
-                raise UpdateFailed(f"GO API non-JSON response for {path}: {text[:120]}") from err
-    except aiohttp.ClientError as err:
-        raise UpdateFailed(f"Network error for {path}: {err}") from err
+                return json.loads(await resp.text())
+            except (ValueError, TypeError):
+                raise UpdateFailed("Invalid GO API response") from None
+    except (aiohttp.ClientError, TimeoutError) as err:
+        # aiohttp errors can include the URL with the Metrolinx key.
+        raise UpdateFailed(f"GO API request failed ({type(err).__name__})") from None
 
 
 class _GoTransitBase(DataUpdateCoordinator):
@@ -83,7 +83,7 @@ class _GoTransitBase(DataUpdateCoordinator):
         self.commute_start = commute_start
         self.commute_end = commute_end
         self._session = async_get_clientsession(hass)
-        self.last_raw: dict[str, Any] = {}
+        self.last_successful_request: str | None = None
         # Backoff state
         self._base_interval = update_interval
         self._consecutive_failures = 0
@@ -103,6 +103,7 @@ class _GoTransitBase(DataUpdateCoordinator):
             raise
 
     def _note_success(self) -> None:
+        self.last_successful_request = dt_util.now().isoformat()
         if self._consecutive_failures:
             self._consecutive_failures = 0
             self.update_interval = self._base_interval
@@ -162,14 +163,13 @@ class DepartureCoordinator(_GoTransitBase):
         # Next service
         try:
             raw = await self._get(f"Stop/NextService/{self.from_stop_code}")
-            self.last_raw["next_service"] = raw
             result["next_departure"] = parsers.parse_next_service(raw, self.line_code, self.to_stop_name)
             result["live_departures"] = parsers.parse_next_service_rows(raw, self.line_code)
             result["live_departures_timestamp"] = (raw.get("Metadata") or {}).get("TimeStamp")
         except UpdateFailed as err:
             _LOGGER.warning("Next service fetch failed: %s", err)
         except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("Next service unexpected error: %s", err)
+            _LOGGER.warning("Next service unexpected error (%s)", type(err).__name__)
 
         # Journey schedule.
         # The Journey endpoint is a trip planner: its trailing count limits
@@ -187,18 +187,16 @@ class DepartureCoordinator(_GoTransitBase):
                 f"Schedule/Journey/{date_str}/{self.from_stop_code}"
                 f"/{self.to_stop_code}/{time_str}/{fetch_n}"
             )
-            self.last_raw["journey"] = raw
             result["departures"] = parsers.parse_journey(raw)[: self.max_departures]
         except UpdateFailed as err:
             _LOGGER.warning("Journey fetch failed: %s", err)
         except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("Journey unexpected error: %s", err)
+            _LOGGER.warning("Journey unexpected error (%s)", type(err).__name__)
 
         # Exceptions / cancellation
         if result["next_departure"] or self.watching_departure():
             try:
                 raw = await self._get("ServiceUpdate/Exceptions/All")
-                self.last_raw["exceptions"] = raw
                 result["boarding_cancellations"] = parsers.parse_boarding_cancellations(raw, self.from_stop_code)
                 result["exceptions_timestamp"] = (raw.get("Metadata") or {}).get("TimeStamp")
                 if next_departure := result["next_departure"]:
@@ -208,7 +206,7 @@ class DepartureCoordinator(_GoTransitBase):
             except UpdateFailed as err:
                 _LOGGER.warning("Exceptions fetch failed: %s", err)
             except Exception as err:  # noqa: BLE001
-                _LOGGER.warning("Exceptions unexpected error: %s", err)
+                _LOGGER.warning("Exceptions unexpected error (%s)", type(err).__name__)
 
         if result["next_departure"]:
             delay = result["next_departure"].get("delay_minutes")
@@ -241,11 +239,10 @@ class VehicleCoordinator(_GoTransitBase):
         }
         try:
             raw = await self._get("ServiceataGlance/Trains/All")
-            self.last_raw["trains"] = raw
             result["vehicle_positions"] = parsers.parse_trains(raw, self.line_code)
             result["feed_timestamp"] = (raw.get("Metadata") or {}).get("TimeStamp")
-        except (AttributeError, TypeError, ValueError) as err:
-            raise UpdateFailed("Invalid GO Transit vehicle response") from err
+        except (AttributeError, TypeError, ValueError):
+            raise UpdateFailed("Invalid GO Transit vehicle response") from None
         return result
 
 
@@ -264,12 +261,11 @@ class AlertCoordinator(_GoTransitBase):
         result: dict[str, Any] = {"alerts": [], "updated_at": dt_util.now().isoformat()}
         try:
             raw = await self._get("ServiceUpdate/ServiceAlert/All")
-            self.last_raw["alerts"] = raw
             result["alerts"] = parsers.parse_alerts(raw, self.line_code)
         except UpdateFailed as err:
             _LOGGER.warning("Alert fetch failed: %s", err)
         except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("Alert unexpected error: %s", err)
+            _LOGGER.warning("Alert unexpected error (%s)", type(err).__name__)
         return result
 
 
@@ -300,13 +296,12 @@ class ConsistCoordinator(_GoTransitBase):
         result["trip_number"] = trip_number
         try:
             raw = await self._get("Fleet/Consist/All")
-            self.last_raw["consist"] = raw
             parsed = parsers.parse_consist(raw, trip_number)
             result.update(parsed)
         except UpdateFailed as err:
             _LOGGER.warning("Consist fetch failed: %s", err)
         except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("Consist unexpected error: %s", err)
+            _LOGGER.warning("Consist unexpected error (%s)", type(err).__name__)
         return result
 
 
@@ -339,11 +334,10 @@ class GuaranteeCoordinator(_GoTransitBase):
         today = dt_util.now().strftime("%Y%m%d")
         try:
             raw = await self._get(f"ServiceUpdate/ServiceGuarantee/{trip_number}/{today}")
-            self.last_raw["guarantee"] = raw
             parsed = parsers.parse_guarantee(raw, self.from_stop_code)
             result.update(parsed)
         except UpdateFailed as err:
-            _LOGGER.debug("Guarantee returned no data for trip %s: %s", trip_number, err)
+            _LOGGER.debug("Guarantee fetch failed: %s", err)
         except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("Guarantee unexpected error: %s", err)
+            _LOGGER.warning("Guarantee unexpected error (%s)", type(err).__name__)
         return result

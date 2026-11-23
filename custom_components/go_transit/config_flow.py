@@ -63,22 +63,19 @@ async def _api_get(api_key: str, path: str) -> Any:
             # Auth failures come back as 401/403
             if resp.status in (401, 403):
                 raise _AuthError(f"HTTP {resp.status}")
-            # Read the body exactly once — reading text() then json() on the
-            # same response consumes the stream twice and raises.
-            text = await resp.text()
             if resp.status != 200:
-                raise _ApiError(f"HTTP {resp.status}: {text[:200]}")
+                raise _ApiError(f"HTTP {resp.status}")
             try:
-                data = json.loads(text)
-            except (ValueError, TypeError) as err:
-                raise _ApiError(f"Non-JSON response: {text[:200]}") from err
+                data = json.loads(await resp.text())
+            except (ValueError, TypeError):
+                raise _ApiError("Invalid JSON response") from None
             # The API reports errors inside Metadata.ErrorCode even on HTTP 200
             meta = data.get("Metadata", {}) if isinstance(data, dict) else {}
             code = str(meta.get("ErrorCode", "200"))
             if code in ("401", "403"):
-                raise _AuthError(f"Metadata ErrorCode {code}: {meta.get('ErrorMessage')}")
+                raise _AuthError(f"API error code {code}")
             if code == "404":
-                raise _ApiError(f"Metadata ErrorCode 404: {meta.get('ErrorMessage')} (endpoint not found)")
+                raise _ApiError("API error code 404")
             return data
 
 
@@ -165,11 +162,12 @@ class GoTransitConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except _AuthError as err:
                 _LOGGER.warning("GO Transit API rejected the key: %s", err)
                 errors["base"] = "invalid_auth"
-            except (_ApiError, aiohttp.ClientError) as err:
-                _LOGGER.warning("GO Transit API connection problem: %s", err)
+            except _ApiError as err:
+                _LOGGER.warning("GO Transit API setup request failed: %s", err)
                 errors["base"] = "cannot_connect"
-            except Exception:  # noqa: BLE001
-                _LOGGER.exception("Unexpected error validating GO Transit API key")
+            except Exception as err:  # noqa: BLE001
+                # Transport and parsing errors can contain the credential-bearing URL.
+                _LOGGER.warning("GO Transit API setup request failed (%s)", type(err).__name__)
                 errors["base"] = "cannot_connect"
 
         return self.async_show_form(
