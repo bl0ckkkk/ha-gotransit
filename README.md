@@ -337,7 +337,7 @@ automation:
 
 - **Vehicle positions:** The Metrolinx GTFS Realtime vehicle feed (`Gtfs/Feed/VehiclePosition`) returns protobuf binary — this integration does not parse it. Positions come from `ServiceataGlance/Trains/All` instead, which is JSON but may have null lat/lon for some trips.
 - **Rate limits:** Metrolinx does not publish rate limit numbers. Their docs state keys can be disabled for "excessive" use. The tiered polling in this integration is conservative by design.
-- **API field names:** The OpenMetrolinx API docs show sample field names that may not exactly match live responses. If sensors show `unknown`, use the diagnostics tool (below) to inspect the raw API response and open an issue.
+- **API field names:** The OpenMetrolinx API docs show sample field names that may not exactly match live responses. If sensors show `unknown`, download the polling diagnostics described below and include them when opening an issue.
 - **Delay data:** Delay is computed from `ScheduledDepartureTime` vs `ComputedDepartureTime` when a dedicated delay field isn't present. Outside active service hours, delay sensors return `0`.
 - **Schedule only outside service hours:** The `Stop/NextService` endpoint returns nothing when no trains are running. `Next Departure` will show `unavailable` overnight.
 
@@ -345,17 +345,12 @@ automation:
 
 ## Troubleshooting
 
-The integration ships with a HA diagnostics endpoint that dumps everything useful in one download:
+In Home Assistant, go to **Settings → Devices & Services → GO Transit → ⋮ → Download diagnostics**.
+The JSON file lists each coordinator's update status, last successful request time,
+error category, polling interval, and consecutive failure count. The export omits
+credentials, route settings, raw API responses, and raw error messages.
 
-1. Settings → Devices & Services → GO Transit → ⋮ → **Download diagnostics**
-2. The JSON file contains:
-   - Your config (API key redacted)
-   - Raw API responses from all five coordinators
-   - Processed sensor data
-   - Last error message per coordinator
-   - Current poll intervals
-
-Share this file (with any personal data removed) when opening an issue.
+Include the diagnostics file and a description of the affected entity when opening an issue.
 
 ---
 
