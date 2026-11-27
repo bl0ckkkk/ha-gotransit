@@ -294,6 +294,46 @@ updated_at: "2026-06-20T07:08:34.112"
 
 ## Example automations
 
+### Pin my train
+
+Each route device has a **Pinned Train** select entity. Choose a dated train
+from its dropdown to keep the existing **Train** map tracker on that trip,
+even after the departure board advances. The current live departure and
+upcoming scheduled departures are offered; the pinned option remains selectable
+after it disappears from the board.
+
+The selection survives Home Assistant restarts and integration reloads. Choose
+**Follow next departure** to clear it. Pins expire 12 hours after selection,
+including across midnight, so a reused trip number is not followed indefinitely.
+Expiry is reflected on the next feed update. Each route has its own independent pin.
+
+**Pinned Train Status** reports `In motion`, `Stopped`, or `At destination`
+(only when the live feed explicitly identifies the configured destination as
+the train's current station). Its attributes include the selected trip number,
+scheduled departure/arrival, live delay, next stop, current station, car count,
+pin expiry, and feed timestamp. A missing live trip reports `Awaiting live data`;
+it does not imply arrival or cancellation. The map becomes unavailable when
+the selected trip has no coordinates and never falls back to another train
+while the pin is active.
+
+The departure board, Catchable, Cars, and Service Guarantee entities continue
+to describe the next departure. Use **Pinned Train Status** for automations
+about your selected trip. For journeys with transfers, the pin follows the
+first train only. No additional API polling is required.
+
+Example (replace entity IDs with those for your route):
+
+```yaml
+action: select.select_option
+target:
+  entity_id: select.go_burlington_union_pinned_train
+data:
+  option: "Follow next departure"
+```
+
+To pin a train, use an exact option from the select entity's `options` attribute,
+or choose it directly in the Home Assistant UI.
+
 ### Notify if your train is delayed at departure time
 ```yaml
 automation:

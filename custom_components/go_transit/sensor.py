@@ -43,6 +43,7 @@ async def async_setup_entry(
 ) -> None:
     coords = hass.data[DOMAIN][entry.entry_id]
     async_add_entities([
+        GoTransitPinnedTrainStatusSensor(coords["pinned"], entry),
         GoTransitNextDepartureSensor(coords["departures"], entry),
         GoTransitPlatformSensor(coords["departures"], entry),
         GoTransitStatusSensor(coords["departures"], entry),
@@ -53,6 +54,47 @@ async def async_setup_entry(
         GoTransitConsistSensor(coords["consist"], coords["vehicles"], entry),
         GoTransitGuaranteeSensor(coords["guarantee"], entry),
     ])
+
+
+class GoTransitPinnedTrainStatusSensor(CoordinatorEntity, SensorEntity):
+    """Live status of the selected trip, never of its successor."""
+    _attr_has_entity_name = True
+    _attr_name = "Pinned Train Status"
+    _attr_icon = "mdi:train"
+
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_pinned_train_status"
+        self._attr_device_info = _device(entry, coordinator.departures.line_name)
+
+    @property
+    def native_value(self):
+        if not self.coordinator.pin:
+            return "Not pinned"
+        train = self.coordinator.train
+        if not train or not self.coordinator.vehicles.last_update_success:
+            return "Awaiting live data"
+        if train.get("at_station") == self.coordinator.departures.to_stop_code:
+            return "At destination"
+        return train.get("status") or "Unknown"
+
+    @property
+    def extra_state_attributes(self):
+        pin = self.coordinator.pin or {}
+        train = self.coordinator.train or {}
+        return {
+            "trip_number": pin.get("trip_number"),
+            "departure_datetime": pin.get("departure_datetime"),
+            "arrival_datetime": pin.get("arrival_datetime"),
+            "pinned_at": pin.get("pinned_at"),
+            "expires_at": pin.get("expires_at"),
+            "delay_minutes": train.get("delay_minutes"),
+            "next_stop": train.get("next_stop"),
+            "at_station": train.get("at_station"),
+            "cars": train.get("cars"),
+            "live_data_available": bool(train and self.coordinator.vehicles.last_update_success),
+            "updated_at": (self.coordinator.vehicles.data or {}).get("updated_at"),
+        }
 
 
 def _device(entry: ConfigEntry, line_name: str) -> DeviceInfo:

@@ -34,6 +34,7 @@ from .coordinator import (
     GuaranteeCoordinator,
     VehicleCoordinator,
 )
+from .pinned import PinnedTrainCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -94,6 +95,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await coordinators["alerts"].async_refresh()
     await coordinators["consist"].async_refresh()
     await coordinators["guarantee"].async_refresh()
+
+    pinned = PinnedTrainCoordinator(hass, entry, coordinators["departures"], coordinators["vehicles"])
+    await pinned.async_load()
+    coordinators["pinned"] = pinned
+    for key in ("departures", "vehicles"):
+        entry.async_on_unload(coordinators[key].async_add_listener(pinned.async_feed_updated))
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinators
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
